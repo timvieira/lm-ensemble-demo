@@ -11,7 +11,7 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   https://timvieira.github.io/dpp-lm-demo/, https://timvieira.github.io/lm-ensemble-demo/ and https://timvieira.github.io/,
   each in its own box (the + button; several in one box are read as one address). Hugging Face matches the address
   exactly: a parent such as the homepage does not cover the pages under it (checked). Each new demo page that signs in
-  needs its own line. Still untested: a sign-in on the page, end to end, and a live run after it (Tim).
+  needs its own line. A sign-in and a Space run from the page worked (Tim, 14:38; see Done).
 - **The cloud session that built the prototype still points at dpp-lm-demo.** Point it at this repository. Its
   commits to dpp-lm-demo's lab/ensemble* no longer reach any page (that address redirects here). One commit landed
   there after the move (3af271a, empty completions labelled) and was ported here (72d3fb3). Before closing this item,
@@ -93,8 +93,8 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
 - **The GPU time reserved per run is about 4 times what a run takes** (space/app.py, _duration: 68 s reserved for n =
   200 at 32 tokens; 17 s measured). Open: whether ZeroGPU charges the visitor's quota by the time reserved or used; if
   reserved, a tighter estimate saves visitors' quota (but a run that outlasts its reservation is cut off).
-- **Untested on ZeroGPU:** the quota message (ZeroGPU's own error text, matched by "quota"), and a run from the page
-  itself (it needs sign-in, which needs the redirect URI above).
+- **Untested on ZeroGPU:** the quota message (ZeroGPU's own error text, matched by "quota"). Also untested: a sign-in
+  and run on Modal from this page.
 
 ### Untested after the move
 - Hugging Face sign-in end to end, and a live run (/ensemble_sample) from this address.
@@ -146,6 +146,11 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   README.md as the Space card), deployed by .github/workflows/space.yml; js/space.js calls it through Gradio's queue with
   the visitor's token; "Runs on" in the settings picks Modal or the Space; the Space's errors (quota, not answering,
   busy) have their own messages, with "Run on Modal". The status line says where a pool was drawn.
+- **Level lines across the whole window** (Tim, 26 Nov): no longer faded with the grid, and continued past the
+  completions' score range at the same spacing (a ninth of that range); at most about 120. Cost: zooming out to 0.33×
+  draws about 48 lines and a wheel step takes 50 to 65 ms (was about 20).
+- **Sign-in and a run on the Space, from the page, end to end** (Tim's screenshot, 26 Nov 14:38): favorite actor ×
+  favorite author, GPT-2, 200 completions in 9 s, "drawn on the Hugging Face Space".
 - **The title is "Ensembling Language Models"** (Tim, 26 Nov; was "Prompt intersection", which now opens the subtitle). The
   controls start 10 px under the title block, measured by its bottom edge as on the diversity demo (they overlapped it
   by 2 px).

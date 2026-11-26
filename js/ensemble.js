@@ -333,10 +333,10 @@ const plot = {
     defs.append('marker').attr('id', 'axis-arrowhead').attr('viewBox', '0 0 10 10').attr('refX', 9).attr('refY', 5)
       .attr('markerWidth', 7).attr('markerHeight', 7).attr('orient', 'auto')
       .append('path').attr('d', 'M0,1 L9,5 L0,9 z').attr('fill', css('--text-2'));
-    this.gPlane = svg.append('g');
+    this.gPlane = svg.append('g');   // the grid and the diagonal: faded out away from the frame (wide screens)
     this.gGrid = this.gPlane.append('g');
-    this.gContour = this.gPlane.append('g');
     this.gDiag = this.gPlane.append('g');
+    this.gContour = svg.append('g');   // the level lines: not faded, so they run across the whole window
     const gPts = svg.append('g').attr('clip-path', 'url(#plot-frame-clip)');
     this.gDot = gPts.append('g');
     this.gSel = gPts.append('g');
@@ -433,15 +433,20 @@ const plot = {
   contours() {
     this.gContour.selectAll('*').remove();
     if (S.score === 'local') return;   // the local score is not a function of (log p_A, log p_B)
-    // Over the whole plane (wide screens: the window), so the level lines continue past the frame and fade out.
+    // Over the whole plane (wide screens: the window), so the level lines run across it.
     const T = tau(), pl = this.plane, n = WIDE.matches ? 160 : 120, [a0, a1] = pl.X, [b0, b1] = pl.Y;
     const vals = new Float64Array(n * n);
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
       const a = a0 + ((i + 0.5) / n) * (a1 - a0), b = b1 - ((j + 0.5) / n) * (b1 - b0);
       vals[j * n + i] = logGenMean([a, b], T);
     }
-    const sc = S.scoreArr, lo = d3.min(sc), hi = d3.max(sc);
-    const levels = d3.range(1, 9).map((k) => lo + (k / 9) * (hi - lo));
+    // Level lines a ninth of the completions' score range apart (as before, between the lowest and highest
+    // completion), continued at that spacing over the whole plane, so they run across the window. At most about 120.
+    const sc = S.scoreArr, lo = d3.min(sc), hi = d3.max(sc), step = (hi - lo) / 9 || 1;
+    let vmin = Infinity, vmax = -Infinity;
+    for (const v of vals) { if (v < vmin) vmin = v; if (v > vmax) vmax = v; }
+    const k0 = Math.ceil((vmin - lo) / step), k1 = Math.floor((vmax - lo) / step), every = Math.ceil((k1 - k0 + 1) / 120);
+    const levels = d3.range(k0, k1 + 1).filter((k) => k % every === 0).map((k) => lo + k * step);
     const proj = d3.geoTransform({ point(px, py) {
       this.stream.point(pl.px[0] + (px / n) * (pl.px[1] - pl.px[0]), pl.py[1] + (py / n) * (pl.py[0] - pl.py[1]));
     } });
