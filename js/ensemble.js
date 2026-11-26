@@ -1,12 +1,12 @@
 // Prompt intersection: a prototype for "Ensembling Language Models with SMC" (arXiv:2603.05432, Fig. 1).
-// Brief: docs/handoff-ensemble-demo.md. Cached pools: data/ensemble/<pair>.<model>.<format>.json; live runs: the
-// Modal app's /ensemble_sample (modal/app.py), both made by modal/ensemble_lib.py.
+// Brief: docs/handoff-ensemble-demo.md. Cached pools: data/<pair>.<model>.<format>.json; live runs: the
+// dpp-lm-demo Modal app's /ensemble_sample (modal/app.py there), both made by modal/ensemble_lib.py there.
 import * as d3 from 'd3';
 import { logGenMean, tauOf, uOf, tauName, NAMED, summarize, spearman } from './ensemble-math.js';
-import { EXPLAIN, initExplainers } from '../js/explain.js';
-import { getAuth, signIn, signOut, finishSignIn } from '../js/hfauth.js';
+import { EXPLAIN, initExplainers } from './explain.js';
+import { getAuth, signIn, signOut, finishSignIn } from './hfauth.js';
 
-const DATA = '../data/ensemble/';
+const DATA = 'data/';
 const $ = (s) => document.querySelector(s);
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));

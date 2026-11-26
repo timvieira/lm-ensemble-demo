@@ -1,0 +1,50 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Unit tests (ensemble maths)
+        run: node --test tests/ensemble.test.mjs
+      - name: Assemble site
+        # Scripts go under a per-commit folder, so a reload never mixes a new page with stale cached code
+        # (Pages lets browsers reuse files for 10 minutes). As in dpp-lm-demo.
+        run: |
+          V="v-${GITHUB_SHA::8}"
+          mkdir -p "_site/$V"
+          cp -r index.html data _site/
+          cp -r js "_site/$V/"
+          sed -i "s#src=\"js/ensemble.js\"#src=\"$V/js/ensemble.js\"#" _site/index.html
+          grep -q "$V/js/ensemble.js" _site/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

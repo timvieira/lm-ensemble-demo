@@ -1,0 +1,8 @@
+{
+  "name": "prompt-intersection",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/ensemble.test.mjs"
+  }
+}

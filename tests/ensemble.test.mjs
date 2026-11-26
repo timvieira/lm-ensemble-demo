@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { logsumexp, logGenMean, tauOf, uOf, summarize, spearman } from '../lab/ensemble-math.js';
+import { logsumexp, logGenMean, tauOf, uOf, summarize, spearman } from '../js/ensemble-math.js';
 
 const close = (a, b, tol = 1e-9) => assert.ok(Math.abs(a - b) <= tol * Math.max(1, Math.abs(b)), `${a} vs ${b}`);
 
