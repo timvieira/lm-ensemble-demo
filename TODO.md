@@ -19,6 +19,12 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   commits to dpp-lm-demo's lab/ensemble* no longer reach any page (that address redirects here). One commit landed
   there after the move (3af271a, empty completions labelled) and was ported here (72d3fb3). Before closing this item,
   check dpp-lm-demo for later ensemble commits: `git log 3af271a.. -- lab/ensemble.html lab/ensemble.js lab/ensemble-math.js data/ensemble`.
+  26 Nov: it is the cloud session "Missing arrows" (session_015dhVokNfYW6EJNMhx5kX4W; its 30 commits in dpp-lm-demo run from
+  25 Nov 21:20 to 26 Nov 16:49 UTC). A message telling it about the move (paths, what stays in dpp-lm-demo, this
+  TODO) was sent from Tim's laptop session; not confirmed read, and it asks the session to confirm with Tim.
+  Still needed: Tim tells it in that session. It may also need the Claude GitHub app to have access to this new
+  repository (not checked: the laptop's gh token cannot list app installations). No ensemble commits landed in
+  dpp-lm-demo after the move (checked 26 Nov).
 - **Where the GPU code lives.** Decided for now (Tim, 26 Nov): it stays in dpp-lm-demo's Modal app (`dpp-lm-sampler`:
   modal/app.py, modal/ensemble_lib.py, scripts/ensemble_pool.py) with the pools workflow, which reads dpp-lm-demo's
   data/ensemble/presets.json and commits pools there. So a preset change or new pools must be copied by hand between
