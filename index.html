@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Prompt intersection</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..800;1,400..800&display=swap">
+<script type="importmap">
+{ "imports": { "d3": "https://cdn.jsdelivr.net/npm/d3@7.9.0/+esm" } }
+</script>
+<style>
+  /* The main page's tokens (css/style.css): warm paper, Garamond for reading, one red accent. */
+  :root { color-scheme: light; --bg: #f6f1ea; --surface: #fbfaf8; --border: #e2ddd5; --text: #333333; --text-2: #555555;
+    --muted: #999999; --ink: #555555; --btn: #ebe6de; --btn-line: #d3cbbf; --accent: #c8473c; --grid: #e6dfd4;
+    --serif: "EB Garamond", "PT Serif", Georgia, serif; --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    --mono: "SF Mono", "Fira Code", Menlo, Consolas, monospace; --r: 6px; --rail-w: 360px; }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 var(--sans); }
+  a { color: inherit; }
+  header { padding: 14px 16px 6px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; }
+  h1 { font: 575 30px/1.15 var(--serif); margin: 0; }
+  .links { display: flex; gap: 14px; font-size: 13px; }
+  .links a { color: var(--text-2); text-underline-offset: 2px; }
+  .lede { flex-basis: 100%; margin: 0; color: var(--text-2); font: italic 17px/1.35 var(--serif); }
+  .note { flex-basis: 100%; margin: 4px 0 0; font-size: 12.5px; color: #6b5a2a; background: #fbf1d0; border-left: 3px solid #e0b84a; padding: 4px 10px; border-radius: 3px; width: fit-content; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; padding: 10px 16px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--surface); }
+  .ctl { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); }
+  .ctl .lab { font: 500 13px var(--sans); color: var(--text-2); }
+  select { font: inherit; font-size: 13px; color: var(--text); background: #fff; border: 1px solid var(--btn-line); border-radius: var(--r); padding: 4px 6px; max-width: 100%; }
+  .tau { display: grid; grid-template-columns: auto 260px auto; align-items: center; column-gap: 10px; }
+  .tau .ends { grid-column: 2; display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: -2px; }
+  .tau input[type=range] { width: 100%; accent-color: var(--ink); margin: 0; }
+  .tau output { font: 13px var(--mono); min-width: 7.5em; }
+  .ticks { grid-column: 2; position: relative; height: 12px; font-size: 10px; color: var(--muted); }
+  .ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; cursor: pointer; }
+  .ticks span:hover { color: var(--text); }
+  .pick { display: inline-flex; gap: 2px; padding: 2px; background: rgba(0,0,0,.04); border-radius: 4px; }
+  .pick button { font: 12.5px var(--sans); color: var(--text-2); background: transparent; border: 0; border-radius: 3px; padding: 3px 10px; cursor: pointer; white-space: nowrap; }
+  .pick button[aria-pressed="true"] { background: #fff; color: var(--text); box-shadow: 0 0 0 1px var(--btn-line); }
+  .pick button:disabled { opacity: .45; cursor: default; }
+  .stepper { display: inline-flex; align-items: center; gap: 2px; padding: 2px; background: rgba(0,0,0,.04); border-radius: 4px; }
+  .stepper button { width: 26px; height: 24px; border: 0; background: transparent; border-radius: 3px; cursor: pointer; font: 15px var(--sans); color: var(--text-2); }
+  .stepper output { min-width: 26px; text-align: center; font: 500 13px var(--mono); background: #fff; border-radius: 3px; box-shadow: 0 0 0 1px var(--btn-line); padding: 2px 0; }
+
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) var(--rail-w); min-height: calc(100vh - 150px); }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } .tau { grid-template-columns: auto minmax(0, 1fr) auto; width: 100%; } }
+  .stage { position: relative; min-width: 0; padding: 8px 12px; }
+  #plot { width: 100%; height: min(78vh, 760px); min-height: 360px; display: block; touch-action: none; }
+  #plot text { font-family: var(--sans); }
+  .lbl { font: italic 14px var(--serif); fill: var(--text); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; pointer-events: none; }
+  .axis-lab { font: 12px var(--sans); fill: var(--text-2); }
+  .tick text { font: 10.5px var(--mono); fill: var(--muted); }
+  .tick line, .domain { stroke: var(--grid); }
+  #tip { position: fixed; z-index: 10; max-width: 320px; pointer-events: none; background: #fff; border: 1px solid var(--border); border-radius: var(--r); padding: 8px 10px; font: 15px/1.35 var(--serif); box-shadow: 0 4px 16px rgb(0 0 0 / .08); }
+  #tip .m { font: 11.5px var(--mono); color: var(--muted); margin-top: 4px; }
+
+  .rail { border-left: 1px solid var(--border); background: var(--surface); padding: 12px 14px 40px; min-width: 0; }
+  @media (max-width: 900px) { .rail { border-left: 0; border-top: 1px solid var(--border); } }
+  .rail h2 { font: 500 22px/1.2 var(--serif); margin: 4px 0 2px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 10px; }
+  .readout { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 12.5px; color: var(--text-2); margin-bottom: 12px; }
+  .readout .v { font: 12.5px var(--mono); color: var(--text); }
+  .cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .card { background: #fff; border: 1px solid var(--border); border-radius: var(--r); padding: 11px 14px 9px; display: flex; flex-direction: column; gap: 7px; cursor: pointer; }
+  .card.hl { border-color: var(--text-2); }
+  .card .txt { white-space: pre-wrap; overflow-wrap: anywhere; font: 17px/1.4 var(--serif); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden; }
+  .card.open .txt { display: block; overflow: visible; }
+  .card .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; color: var(--muted); font: 11.5px var(--sans); }
+  .card .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex: none; }
+  .cutoff { color: var(--text-2); font-style: italic; flex-basis: 100%; }
+  #valid { width: 100%; height: 180px; display: block; margin-top: 4px; }
+  details.about { margin-top: 18px; font-size: 13px; color: var(--text-2); }
+  details.about summary { cursor: pointer; font: 500 15px var(--serif); color: var(--text); }
+  details.about p { margin: 6px 0; }
+  .empty { padding: 40px 16px; color: var(--text-2); font: 17px var(--serif); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Prompt intersection</h1>
+  <nav class="links"><a href="https://arxiv.org/abs/2603.05432" target="_blank" rel="noopener">Paper ↗</a><a href="../">The diversity demo ↗</a></nav>
+  <p class="lede">Completions likely under two prompts at once: an ensemble of a language model with itself.</p>
+  <p class="note"><b>Prototype.</b> Unlinked and changing; <span id="data-note">cached completions only</span>.</p>
+</header>
+
+<div class="controls">
+  <label class="ctl"><span class="lab">Prompts</span><select id="preset" aria-label="Prompt pair"></select></label>
+  <div class="ctl tau">
+    <span class="lab" title="The power τ of the generalised mean">τ</span>
+    <input id="tau" type="range" min="0" max="1000" step="1" value="500" aria-label="τ">
+    <output id="tau-out"></output>
+    <div class="ticks" id="ticks"></div>
+    <span class="ends" aria-hidden="true"><span>agreement</span><span>coverage</span></span>
+  </div>
+  <div class="ctl"><span class="lab">K</span><span class="stepper"><button id="k-minus" aria-label="Fewer">−</button><output id="k">5</output><button id="k-plus" aria-label="More">+</button></span></div>
+  <span class="pick" role="group" aria-label="How to choose"><button data-mode="map" aria-pressed="true">Most likely</button><button data-mode="sample" aria-pressed="false">Sample</button></span>
+  <span class="ctl"><span class="lab">Scored</span><span class="pick" role="group" aria-label="Scored"><button data-score="global" aria-pressed="true">global</button><button data-score="local" aria-pressed="false">local</button></span></span>
+</div>
+
+<div class="layout">
+  <section class="stage">
+    <svg id="plot" role="img" aria-label="Each completion at (log p under prompt A, log p under prompt B)"></svg>
+    <div id="empty" class="empty" hidden></div>
+  </section>
+  <aside class="rail">
+    <h2>Selected</h2>
+    <p class="sub" id="sel-sub"></p>
+    <div class="readout" id="readout"></div>
+    <ol class="cards" id="cards"></ol>
+    <h2 style="margin-top:18px">Against the “A and B” prompt</h2>
+    <p class="sub" id="valid-sub"></p>
+    <svg id="valid" aria-label="Each completion's score against its log p under the explicit prompt"></svg>
+    <details class="about">
+      <summary>What this shows</summary>
+      <p>Each dot is a completion, placed by how likely it is after prompt A (across) and after prompt B (up). The completions were drawn from the <i>token-level</i> product of the two prompts: at every step, the next token is picked in proportion to p<sub>A</sub>·p<sub>B</sub>.</p>
+      <p><b>τ</b> chooses how the two probabilities are combined over the <i>whole string</i>: the generalised mean (Σ ½ p<sub>k</sub><sup>τ</sup>)<sup>1/τ</sup>. At the left end, the minimum: a completion is only as good as its worse prompt says (agreement). In the middle, the product. Then the sum, a mixture, and at the right end the maximum: either prompt liking it is enough (coverage). The grey lines are where that combined score is constant; the red points are the K chosen.</p>
+      <p><b>Scored: local</b> uses the token-level product's own string probability instead, the usual way of ensembling. It favours openings both prompts like one token at a time, rather than completions both like as a whole (the paper's Fig. 1).</p>
+      <p><b>Sample</b> draws K completions with importance weights: the combined score divided by the probability of drawing the completion. "Uses n of N" is the effective sample size of those weights: how many completions the estimate really rests on.</p>
+    </details>
+  </aside>
+</div>
+<div id="tip" hidden></div>
+<script type="module" src="ensemble.js"></script>
+</body>
+</html>
