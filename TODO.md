@@ -62,6 +62,11 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   the τ explainer says the product is "the paper's main ensemble" and that each τ is the distribution closest to
   both prompts under an α-divergence with α = 1 − τ; the explicit-prompt explainer quotes the paper's ρ = 0.96
   (global) and ρ = 0.09 (local). Check each against the paper's PDF (the conference version).
+- **Zoomed out, the plot shows impossible values.** The zoom goes down to 0.2× as on the diversity demo, but here that
+  shows log p up to +40 (Tim's phone, 26 Nov), where no completion can be. Open: stop zooming out at the first view (1×)?
+- **On a phone the labels drift far from their dots** (Tim's screenshot, 26 Nov: "Albert Einstein." about 50 px from
+  its point): on a narrow frame most labels sit left of their dots and are pushed down one by one. Same cause as the
+  crowding item above.
 - **The banner is stale:** "only the example pairs have completions so far", but live runs exist since
   dpp-lm-demo e54c873 (they need Hugging Face sign-in; see the first item).
 
@@ -105,6 +110,11 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   the page over the plot (touch-action: pan-y). Checked headless at 1600 × 1000 with synthetic events (wheel ×5 =
   2×, Shift-drag, plain drag, double-click; about 20 ms from a wheel step to the next drawn frame) and a tap at
   390 × 844.
+- **Menus on phones** (Tim's screenshot: View opened off the left edge): View sits at the right end of its line, so its
+  menu opens leftward on screen; the gesture hint gets a line of its own instead of being cut; the readouts wrap; below
+  480 px the composer's menus open from its left edge. Checked at dpp-lm-demo's overflow-test widths (320, 360, 390,
+  430, 600, 700, 768, 900, 1024, 1280, 1440) and 1100: every menu on screen, nothing cut, no sideways scroll. This repo
+  still has no overflow test of its own.
 - **Card meta lines** break between fields, never inside one ("log p_A −1.1" stays together).
 - **The explainers' maths was broken in 9 of 16** (since they were written in dpp-lm-demo ad96dde): the TeX sat in
   JS template literals with single backslashes, so \varphi, \tau, \rho, \frac became control characters and
