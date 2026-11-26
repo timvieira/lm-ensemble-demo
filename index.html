@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="booting">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -19,17 +19,18 @@
   :root { color-scheme: light; --bg: #f6f1ea; --surface: #fbfaf8; --border: #e2ddd5; --text: #333333; --text-2: #555555;
     --muted: #999999; --ink: #555555; --btn: #ebe6de; --btn-line: #d3cbbf; --accent: #c8473c; --grid: #e6dfd4;
     --serif: "EB Garamond", "PT Serif", Georgia, serif; --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-    --mono: "SF Mono", "Fira Code", Menlo, Consolas, monospace; --r: 6px; --rail-w: 360px; }
+    --mono: "SF Mono", "Fira Code", Menlo, Consolas, monospace; --r: 6px; --rail-w: 340px; --ctl-w: 352px; }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 var(--sans); }
   a { color: inherit; }
-  header { padding: 14px 16px 6px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; }
+  .top { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px 4px; }
+  .brand { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
   h1 { font: 575 30px/1.15 var(--serif); margin: 0; }
   .links { display: flex; gap: 14px; font-size: 13px; }
   .links a { color: var(--text-2); text-underline-offset: 2px; }
-  .lede { flex-basis: 100%; margin: 0; color: var(--text-2); font: italic 17px/1.35 var(--serif); }
-  .note { flex-basis: 100%; margin: 4px 0 0; font-size: 12.5px; color: #6b5a2a; background: #fbf1d0; border-left: 3px solid #e0b84a; padding: 4px 10px; border-radius: 3px; width: fit-content; }
+  .lede { margin: 0; color: var(--text-2); font: italic 17px/1.35 var(--serif); }
+  .note { margin: 0; font-size: 12.5px; color: #6b5a2a; background: #fbf1d0; border-left: 3px solid #e0b84a; padding: 4px 10px; border-radius: 3px; width: fit-content; }
 
   .controls { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; padding: 10px 16px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--surface); }
   .ctl { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); }
@@ -54,11 +55,6 @@
   .stepper button { width: 26px; height: 24px; border: 0; background: transparent; border-radius: 3px; cursor: pointer; font: 15px var(--sans); color: var(--text-2); }
   .stepper output { min-width: 26px; text-align: center; font: 500 13px var(--mono); background: #fff; border-radius: 3px; box-shadow: 0 0 0 1px var(--btn-line); padding: 2px 0; }
 
-  .layout { display: grid; grid-template-columns: 340px minmax(0, 1fr) var(--rail-w); min-height: calc(100vh - 120px); }
-  @media (max-width: 1150px) { .layout { grid-template-columns: 340px minmax(0, 1fr); } .rail { grid-column: 1 / -1; } }
-  @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } }
-  .left { padding: 12px 0 12px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-  @media (max-width: 760px) { .left { padding: 12px 16px 0; } }
 
   /* The composer (css/style.css): two prompts, examples under +, settings in a chip, the round red ↑. */
   .composer { background: #fff; border: 1px solid var(--border); border-radius: var(--r); padding: 10px 10px 8px 14px; display: flex; flex-direction: column; gap: 4px; box-shadow: 0 1px 3px rgb(0 0 0 / .04); }
@@ -115,7 +111,7 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .btn { font: 14px var(--sans); color: var(--text-2); background: transparent; border: 1px solid #ddd; border-radius: 4px; padding: 6px 14px; cursor: pointer; }
   .btn:hover { background: rgba(0,0,0,.04); color: var(--text); }
-  .viewmenu { position: absolute; right: 18px; bottom: 14px; z-index: 20; }
+  .viewmenu { position: relative; flex: none; }
   .viewmenu summary { list-style: none; cursor: pointer; font-size: 12.5px; color: var(--text-2); padding: 3px 10px; border-radius: 4px; border: 1px solid transparent; background: rgb(251 250 248 / .8); }
   .viewmenu summary::-webkit-details-marker { display: none; }
   .viewmenu summary::after { content: " ▾"; color: var(--muted); font-size: 10px; }
@@ -132,28 +128,33 @@
   .xpop .katex-display { margin: .5em 0; overflow-x: auto; overflow-y: hidden; }
   .xp-title { font: 600 13px var(--sans); color: var(--text-2); margin-bottom: 2px; }
   .xp-close { position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; border: 0; background: none; color: var(--muted); font-size: 18px; cursor: pointer; border-radius: 4px; }
-  .stage { position: relative; min-width: 0; padding: 8px 12px; }
-  #plot { width: 100%; height: min(78vh, 760px); min-height: 360px; display: block; touch-action: none; }
+  .stage { position: relative; min-width: 0; }
+  #plot { width: 100%; display: block; touch-action: none; }
   #plot text { font-family: var(--sans); }
+  .axis-arrow { stroke: var(--text-2); stroke-width: 1; }
   .lbl { font: italic 14px var(--serif); fill: var(--text); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; pointer-events: none; }
   .axis-lab { font: 12px var(--sans); fill: var(--text-2); }
   .tick text { font: 10.5px var(--mono); fill: var(--muted); }
   .tick line, .domain { stroke: var(--grid); }
-  #tip { position: fixed; z-index: 10; max-width: 320px; pointer-events: none; background: #fff; border: 1px solid var(--border); border-radius: var(--r); padding: 8px 10px; font: 15px/1.35 var(--serif); box-shadow: 0 4px 16px rgb(0 0 0 / .08); }
+  #tip { position: fixed; z-index: 110; max-width: 320px; pointer-events: none; background: #fff; border: 1px solid var(--border); border-radius: var(--r); padding: 8px 10px; font: 15px/1.35 var(--serif); box-shadow: 0 4px 16px rgb(0 0 0 / .08); }
   #tip .m { font: 11.5px var(--mono); color: var(--muted); margin-top: 4px; }
 
-  .rail { border-left: 1px solid var(--border); background: var(--surface); padding: 12px 14px 40px; min-width: 0; }
-  @media (max-width: 900px) { .rail { border-left: 0; border-top: 1px solid var(--border); } }
-  .rail h2 { font: 500 22px/1.2 var(--serif); margin: 4px 0 2px; }
+  .rail { background: var(--surface); padding: 12px 14px 40px; min-width: 0; }
+  .rail h2 { font: 500 21px/1.2 var(--serif); margin: 4px 0 2px; }
   .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 10px; }
-  .readout { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 12.5px; color: var(--text-2); margin-bottom: 12px; }
-  .readout .v { font: 12.5px var(--mono); color: var(--text); }
+  /* The bar of readouts (the diversity demo's Details bar): Uses n of N and log Ẑ, a note, and View. */
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; min-width: 0; font-size: 12.5px; color: var(--text-2); }
+  .readout { display: flex; flex-wrap: wrap; gap: 2px 14px; flex: none; }
+  .readout .stat { white-space: nowrap; }
+  .readout .v { font: 12.5px var(--mono); color: var(--text); margin-left: 6px; }
+  #bar-note { flex: 1 1 0; min-width: 0; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
   .card { background: #fff; border: 1px solid var(--border); border-radius: var(--r); padding: 11px 14px 9px; display: flex; flex-direction: column; gap: 7px; cursor: pointer; }
   .card.hl { border-color: var(--text-2); }
   .card .txt { white-space: pre-wrap; overflow-wrap: anywhere; font: 17px/1.4 var(--serif); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden; }
   .card.open .txt { display: block; overflow: visible; }
-  .card .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; color: var(--muted); font: 11.5px var(--sans); }
+  .card .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; color: var(--muted); font: 11.5px var(--sans); }
+  .card .meta .f { white-space: nowrap; }   /* a line breaks between fields, never inside one (no "·": a wrapped line would start with it) */
   .card .rank { font: 600 11.5px var(--sans); color: var(--text-2); min-width: 1.6em; }
   .btn.more { margin-top: 10px; width: 100%; }
   .card .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex: none; }
@@ -164,68 +165,76 @@
   details.about summary { cursor: pointer; font: 500 15px var(--serif); color: var(--text); }
   details.about p { margin: 6px 0; }
   .empty { padding: 40px 16px; color: var(--text-2); font: 17px var(--serif); }
+
+  /* =====================================================================================
+     The diversity demo's full-page layout (dpp-lm-demo css/style.css). Wide screens: the plot fills the window;
+     the title and the controls float top left, the ranked rail runs down the right, the readouts sit in a bar
+     along the bottom. Narrower screens: one column in normal flow, with the τ panel docked at the bottom.
+     The breakpoint is wider than the diversity demo's (901px): a 2-D scatter with axes needs the room between
+     the controls and the rail.
+     ===================================================================================== */
+  @media (min-width: 1100px) {
+    html, body { height: 100%; overflow: hidden; }
+    .top { position: fixed; top: 12px; left: 18px; z-index: 30; width: calc(var(--ctl-w) - 32px); padding: 0; gap: 4px; pointer-events: none; }
+    .top > * { pointer-events: auto; }
+    h1 { font-size: 22px; }
+    .lede { font-size: 15px; }
+    .note { font-size: 12px; padding: 2px 10px; }
+    /* the plot: no box, the page itself */
+    .stage { position: fixed; inset: 0; z-index: 1; }
+    #plot { height: 100%; }
+    .stage-msg { position: fixed; left: var(--ctl-w); right: var(--rail-w); top: 0; bottom: var(--bar-h, 40px); background: rgb(246 241 234 / .86); }
+    .stage-msg.error { box-shadow: none; }
+    /* the controls: a column on the left, under the title */
+    .dock { position: fixed; left: 16px; top: calc(var(--top-h, 110px) + 10px); width: calc(var(--ctl-w) - 32px); z-index: 30; display: flex; flex-direction: column; gap: 10px; }
+    .dock .composer, .dock .panel { box-shadow: 0 4px 20px rgb(0 0 0 / .08); }
+    .dock .status { background: rgb(246 241 234 / .85); border-radius: 4px; padding: 2px 6px; }
+    .dock .chipmenu .menu.list { max-height: calc(100vh - 220px); overflow-y: auto; }
+    /* the ranked rail: full height, not floating */
+    .rail { position: fixed; top: 0; right: 0; bottom: var(--bar-h, 40px); width: var(--rail-w); z-index: 20; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable;
+      border-left: 1px solid var(--border); padding: 16px 14px 20px; }
+    /* the readouts: a bar along the bottom, edge to edge */
+    .bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 25; flex-wrap: nowrap; background: var(--surface); border-top: 1px solid var(--border); padding: 6px 16px; }
+  }
+  @media (max-width: 1099px) {
+    html { scrollbar-gutter: stable; }
+    .app { display: flex; flex-direction: column; gap: 10px; padding: 0 16px; }
+    .dock { display: contents; }
+    .step-1 { order: 0; }
+    .stage { order: 1; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r) var(--r) 0 0; }
+    #plot { height: 55vh; min-height: 320px; }
+    /* the readouts: a bar attached to the bottom of the plot */
+    .bar { order: 2; margin-top: -11px; background: var(--surface); border: 1px solid var(--border); border-radius: 0 0 var(--r) var(--r); padding: 6px 12px; }
+    .rail { order: 3; border: 1px solid var(--border); border-radius: var(--r); padding: 12px 14px 20px; }
+    /* τ docks to the bottom of the screen while scrolling */
+    .step-2 { order: 4; position: sticky; bottom: 0; z-index: 30; margin: 0 -16px; border-radius: var(--r) var(--r) 0 0; border-bottom: 0;
+      padding: 8px 16px calc(8px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 -6px 20px rgb(0 0 0 / .08); }
+  }
+  /* Until the first complete render the page is hidden, so no half-built state shows (js/ensemble.js: reveal). */
+  html.booting body { visibility: hidden; }
 </style>
 </head>
 <body>
-<header>
-  <h1>Prompt intersection</h1>
-  <nav class="links"><a href="https://arxiv.org/abs/2603.05432" target="_blank" rel="noopener">Paper ↗</a><a href="https://timvieira.github.io/dpp-lm-demo/">The diversity demo ↗</a></nav>
+<header class="top">
+  <div class="brand">
+    <h1>Prompt intersection</h1>
+    <nav class="links"><a href="https://arxiv.org/abs/2603.05432" target="_blank" rel="noopener">Paper ↗</a><a href="https://timvieira.github.io/dpp-lm-demo/">The diversity demo ↗</a></nav>
+  </div>
   <p class="lede">Completions likely under two prompts at once: an ensemble of a language model with itself.</p>
   <p class="note"><b>Prototype.</b> Unlinked and changing; only the example pairs have completions so far.</p>
 </header>
 
-<div class="layout">
-  <div class="left">
-    <div class="composer">
-      <textarea id="pa" rows="1" spellcheck="false" aria-label="Prompt A" placeholder="Prompt A, e.g. My favorite physicist is"></textarea>
-      <div class="and">and<button type="button" class="xbtn" data-x="prompts" aria-label="What are the two prompts?">?</button></div>
-      <textarea id="pb" rows="1" spellcheck="false" aria-label="Prompt B" placeholder="Prompt B, e.g. My favorite author is"></textarea>
-      <div class="comp-row">
-        <details class="chipmenu" id="exmenu">
-          <summary class="plusbtn" aria-label="Example prompts" title="Example prompts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary>
-          <div class="menu list" id="examples" role="menu"></div>
-        </details>
-        <details class="chipmenu" id="adv">
-          <summary class="chip" aria-label="Settings"><span id="adv-sum">Qwen3 14B · 200 samples</span></summary>
-          <div class="menu">
-            <label class="field wide"><span class="lab">Model<button type="button" class="xbtn" data-x="model" aria-label="About the model">?</button></span><select id="model"><option value="qwen3-14b" selected>Qwen3 14B, 4-bit (AWQ) · Modal</option><option value="gpt2">GPT-2 (124M) · Modal</option></select></label>
-            <label class="field wide"><span class="lab">Prompt format<button type="button" class="xbtn" data-x="format" aria-label="What is the prompt format?">?</button></span><select id="fmt"><option value="text" selected>Continue text (as in the paper)</option><option value="chat">Chat (messages and replies)</option></select></label>
-            <label class="field wide"><span class="lab">Drawn from<button type="button" class="xbtn" data-x="proposal" aria-label="How are the completions drawn?">?</button></span><select id="proposal"><option value="local_product">the token-level product of A and B</option></select></label>
-            <label class="field"><span class="lab">Samples N<button type="button" class="xbtn" data-x="N" aria-label="What is N?">?</button></span><input id="n" type="number" min="2" max="200" step="10" value="200"></label>
-            <label class="field"><span class="lab">Temp. T′<button type="button" class="xbtn" data-x="Tprime" aria-label="What is T′?">?</button></span><input id="tp" type="number" min="0.2" max="2" step="0.1" value="1.0"></label>
-            <label class="field"><span class="lab">Max tokens<button type="button" class="xbtn" data-x="maxtok" aria-label="What is max tokens?">?</button></span><input id="maxtok" type="number" min="8" max="256" step="8" value="32"></label>
-            <label class="field wide"><span class="lab">The explicit “A and B” prompt, for checking<button type="button" class="xbtn" data-x="promptC" aria-label="What is the explicit prompt?">?</button></span><textarea id="pc" rows="2" spellcheck="false" placeholder="e.g. My favorite physicist and author is"></textarea></label>
-            <p class="menu-note" id="fmt-note"></p>
-          </div>
-        </details>
-        <span class="grow"></span>
-        <button id="go" class="sendbtn" aria-label="Generate completions" title="Generate (Enter)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button>
-      </div>
-    </div>
-    <p id="status" class="status" aria-live="polite"></p>
-
-    <section class="panel" aria-label="Choosing completions">
-      <div class="ctl tau">
-        <span class="lab"><span title="The power τ of the generalised mean">τ</span><button type="button" class="xbtn" data-x="tau" aria-label="What does τ do?">?</button></span>
-        <input id="tau" type="range" min="0" max="1000" step="1" value="500" aria-label="τ">
-        <div class="ticks" id="ticks"></div>
-        <span class="ends" aria-hidden="true"><span>agreement</span><span>coverage</span></span>
-        <output id="tau-out"></output>
-      </div>
-    </section>
-  </div>
-  <section class="stage">
+<main class="app">
+  <!-- The plot: on wide screens, the page itself (the panels float over it). -->
+  <section class="stage" aria-label="The completions">
     <svg id="plot" role="img" aria-label="Each completion at (log p under prompt A, log p under prompt B)"></svg>
     <div id="stage-msg" class="stage-msg" hidden></div>
-    <details class="viewmenu" id="viewmenu">
-      <summary>View</summary>
-      <div class="menu"><span>Scored<button type="button" class="xbtn" data-x="scored" aria-label="Global or local scores?">?</button></span><span class="pick" role="group" aria-label="Scored"><button data-score="global" aria-pressed="true">global (strings)</button><button data-score="local" aria-pressed="false">local (tokens)</button></span></div>
-    </details>
   </section>
+
+  <!-- The ranked completions: a rail on the right on wide screens, under the plot on phones. -->
   <aside class="rail">
     <h2>Ranked by the ensemble</h2>
     <p class="sub" id="sel-sub"></p>
-    <div class="readout" id="readout"></div>
     <ol class="cards" id="cards"></ol>
     <button type="button" class="btn more" id="more" hidden></button>
     <h2 style="margin-top:18px">Against the “A and B” prompt<button type="button" class="xbtn" data-x="valid" aria-label="What does this check?">?</button></h2>
@@ -239,7 +248,59 @@
       <p>Each completion's probability under the ensemble is its score divided by the ensemble's normaliser, estimated from the N completions with importance weights (the score divided by the probability of drawing the completion). "Uses n of N" is the effective sample size of those weights: how many completions that estimate really rests on.</p>
     </details>
   </aside>
-</div>
+
+  <!-- The controls: a column on the left on wide screens; on phones the composer comes first and τ docks at the bottom. -->
+  <div class="dock">
+    <section class="step-1">
+      <div class="composer">
+        <textarea id="pa" rows="1" spellcheck="false" aria-label="Prompt A" placeholder="Prompt A, e.g. My favorite physicist is"></textarea>
+        <div class="and">and<button type="button" class="xbtn" data-x="prompts" aria-label="What are the two prompts?">?</button></div>
+        <textarea id="pb" rows="1" spellcheck="false" aria-label="Prompt B" placeholder="Prompt B, e.g. My favorite author is"></textarea>
+        <div class="comp-row">
+          <details class="chipmenu" id="exmenu">
+            <summary class="plusbtn" aria-label="Example prompts" title="Example prompts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary>
+            <div class="menu list" id="examples" role="menu"></div>
+          </details>
+          <details class="chipmenu" id="adv">
+            <summary class="chip" aria-label="Settings"><span id="adv-sum">Qwen3 14B · 200 samples</span></summary>
+            <div class="menu">
+              <label class="field wide"><span class="lab">Model<button type="button" class="xbtn" data-x="model" aria-label="About the model">?</button></span><select id="model"><option value="qwen3-14b" selected>Qwen3 14B, 4-bit (AWQ) · Modal</option><option value="gpt2">GPT-2 (124M) · Modal</option></select></label>
+              <label class="field wide"><span class="lab">Prompt format<button type="button" class="xbtn" data-x="format" aria-label="What is the prompt format?">?</button></span><select id="fmt"><option value="text" selected>Continue text (as in the paper)</option><option value="chat">Chat (messages and replies)</option></select></label>
+              <label class="field wide"><span class="lab">Drawn from<button type="button" class="xbtn" data-x="proposal" aria-label="How are the completions drawn?">?</button></span><select id="proposal"><option value="local_product">the token-level product of A and B</option></select></label>
+              <label class="field"><span class="lab">Samples N<button type="button" class="xbtn" data-x="N" aria-label="What is N?">?</button></span><input id="n" type="number" min="2" max="200" step="10" value="200"></label>
+              <label class="field"><span class="lab">Temp. T′<button type="button" class="xbtn" data-x="Tprime" aria-label="What is T′?">?</button></span><input id="tp" type="number" min="0.2" max="2" step="0.1" value="1.0"></label>
+              <label class="field"><span class="lab">Max tokens<button type="button" class="xbtn" data-x="maxtok" aria-label="What is max tokens?">?</button></span><input id="maxtok" type="number" min="8" max="256" step="8" value="32"></label>
+              <label class="field wide"><span class="lab">The explicit “A and B” prompt, for checking<button type="button" class="xbtn" data-x="promptC" aria-label="What is the explicit prompt?">?</button></span><textarea id="pc" rows="2" spellcheck="false" placeholder="e.g. My favorite physicist and author is"></textarea></label>
+              <p class="menu-note" id="fmt-note"></p>
+            </div>
+          </details>
+          <span class="grow"></span>
+          <button id="go" class="sendbtn" aria-label="Generate completions" title="Generate (Enter)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button>
+        </div>
+      </div>
+      <p id="status" class="status" aria-live="polite"></p>
+    </section>
+    <section class="panel step-2" aria-label="Choosing completions">
+      <div class="ctl tau">
+        <span class="lab"><span title="The power τ of the generalised mean">τ</span><button type="button" class="xbtn" data-x="tau" aria-label="What does τ do?">?</button></span>
+        <input id="tau" type="range" min="0" max="1000" step="1" value="500" aria-label="τ">
+        <div class="ticks" id="ticks"></div>
+        <span class="ends" aria-hidden="true"><span>agreement</span><span>coverage</span></span>
+        <output id="tau-out"></output>
+      </div>
+    </section>
+  </div>
+
+  <!-- The readouts: a bar along the bottom on wide screens, attached under the plot on phones. -->
+  <section class="bar" id="bar" aria-label="Readouts">
+    <div class="readout" id="readout"></div>
+    <span id="bar-note"></span>
+    <details class="viewmenu" id="viewmenu">
+      <summary>View</summary>
+      <div class="menu"><span>Scored<button type="button" class="xbtn" data-x="scored" aria-label="Global or local scores?">?</button></span><span class="pick" role="group" aria-label="Scored"><button data-score="global" aria-pressed="true">global (strings)</button><button data-score="local" aria-pressed="false">local (tokens)</button></span></div>
+    </details>
+  </section>
+</main>
 <div id="tip" hidden></div>
 <div id="xpop" class="xpop" role="dialog" hidden></div>
 <script type="module" src="js/ensemble.js"></script>

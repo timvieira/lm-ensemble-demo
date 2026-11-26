@@ -21,18 +21,38 @@ const S = { presets: [], pool: null, groups: [], u: 0.5, K: 5, mode: 'map', scor
 
 // ---------------------------------------------------------------- data
 async function init() {
-  Object.assign(EXPLAIN, ENSEMBLE_EXPLAIN);
-  initExplainers();
-  S.presets = await (await fetch(DATA + 'presets.json')).json();
-  wire();
-  syncModel();
-  fill(S.presets[0]);
-  // Back from signing in with Hugging Face: restore the settings and run, as on the diversity demo.
-  const back = await finishSignIn().catch(() => null);
-  if (back?.stash?.cfg) restore(back.stash.cfg);
-  await settingsChanged();
-  if (back?.auth && back.stash?.cfg) run();
-  else if (back?.error) stageMsg({ title: 'Signing in was cancelled.', detail: esc(back.error), actions: signInBtn() });
+  try {
+    Object.assign(EXPLAIN, ENSEMBLE_EXPLAIN);
+    initExplainers();
+    trackLayout();
+    S.presets = await (await fetch(DATA + 'presets.json')).json();
+    wire();
+    syncModel();
+    fill(S.presets[0]);
+    // Back from signing in with Hugging Face: restore the settings and run, as on the diversity demo.
+    const back = await finishSignIn().catch(() => null);
+    if (back?.stash?.cfg) restore(back.stash.cfg);
+    await settingsChanged();
+    if (back?.auth && back.stash?.cfg) run();
+    else if (back?.error) stageMsg({ title: 'Signing in was cancelled.', detail: esc(back.error), actions: signInBtn() });
+  } finally {
+    // The page stays hidden (html.booting) until its first complete render; it is shown even if that failed.
+    requestAnimationFrame(() => document.documentElement.classList.remove('booting'));
+  }
+}
+
+// The full-page layout (wide screens, as on the diversity demo): the controls start under the title block and the
+// rail ends where the bar begins, whatever their heights. Keep --top-h and --bar-h equal to them.
+const WIDE = matchMedia('(min-width: 1100px)');   // the breakpoint in index.html
+function trackLayout() {
+  const root = document.documentElement.style;
+  const set = () => {
+    root.setProperty('--top-h', `${$('.top').offsetHeight}px`);
+    root.setProperty('--bar-h', `${$('#bar').offsetHeight}px`);
+  };
+  set();
+  const ro = new ResizeObserver(set);
+  ro.observe($('.top')); ro.observe($('#bar'));
 }
 
 // The model and the prompt format. "text" continues the prompts as plain text (the paper's Fig. 1); "chat" puts
@@ -236,7 +256,8 @@ function readouts(score) {
     [`Uses${xb('ess')}`, `${fmt(S.sum.ess, 1)} of ${N} completions`],
     [`log Ẑ${xb('logZ')}`, fmt(S.sum.logZ, 2)],
   ];
-  $('#readout').innerHTML = rows.map(([k, v]) => `<span>${k}</span><span class="v">${v}</span>`).join('');
+  $('#readout').innerHTML = rows.map(([k, v]) => `<span class="stat"><span>${k}</span><span class="v">${v}</span></span>`).join('');
+  $('#bar-note').textContent = matchMedia('(pointer: fine)').matches ? 'hover a point to read it' : '';
 }
 
 const SHOWN = 10, LABELLED = 5;   // display only: the list shows ten until "Show all"; the plot labels five
@@ -247,7 +268,7 @@ function cards(rank, gProb) {
     const G = S.groups[g], s = P.samples[G.i];
     return `<li class="card${S.open.has(G.i) ? ' open' : ''}" data-i="${G.i}">
       <div class="txt">${shown(s)}${s.ended ? '' : ' …'}</div>
-      <div class="meta"><span class="rank">${r + 1}.</span>${top.has(G.i) ? '<span class="dot"></span>' : ''}${G.idx.length > 1 ? `×${G.idx.length} · ` : ''}log p<sub>A</sub> ${fmt(s.logpA)} · log p<sub>B</sub> ${fmt(s.logpB)} · ensemble ${pctOf(gProb[g])}${xb('prob')}${s.ended ? '' : `<span class="cutoff">cut off at ${s.nTokens} tokens</span>`}</div></li>`;
+      <div class="meta"><span class="rank">${r + 1}.</span>${top.has(G.i) ? '<span class="dot"></span>' : ''}${G.idx.length > 1 ? `<span class="f">×${G.idx.length}</span>` : ''}<span class="f">log p<sub>A</sub> ${fmt(s.logpA)}</span><span class="f">log p<sub>B</sub> ${fmt(s.logpB)}</span><span class="f">ensemble ${pctOf(gProb[g])}${xb('prob')}</span>${s.ended ? '' : `<span class="cutoff">cut off at ${s.nTokens} tokens</span>`}</div></li>`;
   }).join('');
   const more = $('#more');
   more.hidden = rank.length <= SHOWN;
@@ -268,9 +289,21 @@ const plot = {
   build() {
     const svg = d3.select('#plot');
     svg.selectAll('*').remove();
-    this.gGrid = svg.append('g');
-    this.gContour = svg.append('g');
-    this.gDiag = svg.append('g');
+    const defs = svg.append('defs');
+    // Wide screens: the plane (grid, level lines, diagonal) fades out away from the frame, like the diversity
+    // demo's floor grid. The mask's geometry is set in frame().
+    this.fadeGrad = defs.append('radialGradient').attr('id', 'plane-fade-g').attr('gradientUnits', 'userSpaceOnUse');
+    this.fadeGrad.append('stop').attr('class', 'in').attr('stop-color', '#fff').attr('stop-opacity', 1);
+    this.fadeGrad.append('stop').attr('offset', 1).attr('stop-color', '#fff').attr('stop-opacity', 0);
+    this.fadeRect = defs.append('mask').attr('id', 'plane-fade').attr('maskUnits', 'userSpaceOnUse')
+      .append('rect').attr('fill', 'url(#plane-fade-g)');
+    defs.append('marker').attr('id', 'axis-arrowhead').attr('viewBox', '0 0 10 10').attr('refX', 9).attr('refY', 5)
+      .attr('markerWidth', 7).attr('markerHeight', 7).attr('orient', 'auto')
+      .append('path').attr('d', 'M0,1 L9,5 L0,9 z').attr('fill', css('--text-2'));
+    this.gPlane = svg.append('g');
+    this.gGrid = this.gPlane.append('g');
+    this.gContour = this.gPlane.append('g');
+    this.gDiag = this.gPlane.append('g');
     this.gDot = svg.append('g');
     this.gSel = svg.append('g');
     this.gLbl = svg.append('g');
@@ -280,28 +313,54 @@ const plot = {
       .on('pointerleave', () => { this.highlight(-1); tip(-1); });
   },
   frame() {
-    // Framed once per pool (the view never moves with τ, K or the mode), over every completion.
-    const el = $('#plot'), W = el.clientWidth, H = el.clientHeight, P = S.pool.samples;
-    const m = { l: 56, r: 16, t: 14, b: 46 };
+    // Framed once per pool and layout (the view never moves with τ or the scores), over every completion.
+    // Wide screens: the svg is the whole window, and the frame is the open area between the controls, the rail and
+    // the bar; the plane (grid, level lines, diagonal) continues under the panels and fades out. Narrow screens: the
+    // svg is a box in the page, and the frame is the box less its margins.
+    const el = $('#plot'), W = el.clientWidth, H = el.clientHeight, P = S.pool.samples, wide = WIDE.matches;
+    let m = { l: 56, r: 16, t: 14, b: 46 };
+    if (wide) {
+      const d = $('.dock').getBoundingClientRect(), r = $('.rail').getBoundingClientRect(), b = $('#bar').getBoundingClientRect();
+      m = { l: d.right + 64, r: W - r.left + 40, t: 40, b: H - b.top + 56 };
+    }
     const ext = (k) => { const v = P.map((s) => s[k]); const lo = d3.min(v), hi = d3.max(v), p = 0.04 * (hi - lo || 1); return [lo - p, hi + p]; };
     this.W = W; this.H = H; this.m = m;
     this.x = d3.scaleLinear().domain(ext('logpA')).range([m.l, W - m.r]);
     this.y = d3.scaleLinear().domain(ext('logpB')).range([H - m.b, m.t]);
+    // The plane's extent, in data units and in pixels: the whole window (wide) or the frame.
+    this.plane = wide
+      ? { X: [this.x.invert(0), this.x.invert(W)], Y: [this.y.invert(H), this.y.invert(0)], px: [0, W], py: [H, 0] }
+      : { X: this.x.domain(), Y: this.y.domain(), px: this.x.range(), py: this.y.range() };
+    const cx = (m.l + W - m.r) / 2, cy = (m.t + H - m.b) / 2;
+    const R = Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy)), half = Math.hypot((W - m.r - m.l) / 2, (H - m.b - m.t) / 2);
+    this.fadeGrad.attr('cx', cx).attr('cy', cy).attr('r', R).select('.in').attr('offset', Math.min(0.98, half / R));
+    this.fadeRect.attr('width', W).attr('height', H);
+    this.gPlane.attr('mask', wide ? 'url(#plane-fade)' : null);
+    // Ticks and grid lines by the frame's size in pixels: about one labelled tick per 90 px across and 70 px up,
+    // and a grid line every 60 px or so.
+    const fw = W - m.r - m.l, fh = H - m.b - m.t;
     const ax = this.gAxis;
     ax.selectAll('*').remove();
-    ax.append('g').attr('class', 'tick-x').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(this.x).ticks(6).tickSize(4));
-    ax.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(this.y).ticks(6).tickSize(4));
-    ax.append('text').attr('class', 'axis-lab').attr('x', (m.l + W - m.r) / 2).attr('y', H - 8).attr('text-anchor', 'middle')
+    const xa = ax.append('g').attr('class', 'tick-x').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(this.x).ticks(Math.max(3, Math.round(fw / 90))).tickSize(4));
+    const ya = ax.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(this.y).ticks(Math.max(3, Math.round(fh / 70))).tickSize(4));
+    if (wide) {
+      // No box around the plot: two axes with small arrowheads, as on the diversity demo.
+      xa.select('.domain').remove(); ya.select('.domain').remove();
+      ax.append('line').attr('class', 'axis-arrow').attr('x1', m.l).attr('y1', H - m.b).attr('x2', W - m.r + 18).attr('y2', H - m.b).attr('marker-end', 'url(#axis-arrowhead)');
+      ax.append('line').attr('class', 'axis-arrow').attr('x1', m.l).attr('y1', H - m.b).attr('x2', m.l).attr('y2', m.t - 18).attr('marker-end', 'url(#axis-arrowhead)');
+    }
+    ax.append('text').attr('class', 'axis-lab').attr('x', (m.l + W - m.r) / 2).attr('y', H - m.b + 38).attr('text-anchor', 'middle')
       .text(`log p( · | “${S.pool.prompts.A}”)`);
-    ax.append('text').attr('class', 'axis-lab').attr('transform', `translate(14,${(m.t + H - m.b) / 2}) rotate(-90)`).attr('text-anchor', 'middle')
+    ax.append('text').attr('class', 'axis-lab').attr('transform', `translate(${m.l - 42},${(m.t + H - m.b) / 2}) rotate(-90)`).attr('text-anchor', 'middle')
       .text(`log p( · | “${S.pool.prompts.B}”)`);
-    // Soft grid, as on the main page's floor.
+    // Soft grid over the plane.
     this.gGrid.selectAll('*').remove();
-    const g = this.gGrid, grid = css('--grid');
-    this.x.ticks(12).forEach((v) => g.append('line').attr('x1', this.x(v)).attr('x2', this.x(v)).attr('y1', m.t).attr('y2', H - m.b).attr('stroke', grid));
-    this.y.ticks(12).forEach((v) => g.append('line').attr('y1', this.y(v)).attr('y2', this.y(v)).attr('x1', m.l).attr('x2', W - m.r).attr('stroke', grid));
+    const g = this.gGrid, grid = css('--grid'), pl = this.plane;
+    const lines = ([lo, hi], [f0, f1], px) => { const st = d3.tickStep(f0, f1, Math.max(4, Math.round(px / 60))); return d3.range(Math.ceil(lo / st) * st, hi, st); };
+    lines(pl.X, this.x.domain(), fw).forEach((v) => g.append('line').attr('x1', this.x(v)).attr('x2', this.x(v)).attr('y1', pl.py[1]).attr('y2', pl.py[0]).attr('stroke', grid));
+    lines(pl.Y, this.y.domain(), fh).forEach((v) => g.append('line').attr('y1', this.y(v)).attr('y2', this.y(v)).attr('x1', pl.px[0]).attr('x2', pl.px[1]).attr('stroke', grid));
     // The diagonal log p_A = log p_B, where every member of the family agrees.
-    const [a0, a1] = this.x.domain(), [b0, b1] = this.y.domain(), lo = Math.max(a0, b0), hi = Math.min(a1, b1);
+    const [a0, a1] = pl.X, [b0, b1] = pl.Y, lo = Math.max(a0, b0), hi = Math.min(a1, b1);
     this.gDiag.selectAll('*').remove();
     if (hi > lo) this.gDiag.append('line').attr('x1', this.x(lo)).attr('y1', this.y(lo)).attr('x2', this.x(hi)).attr('y2', this.y(hi))
       .attr('stroke', css('--muted')).attr('stroke-dasharray', '3 4').attr('stroke-width', 1);
@@ -323,7 +382,8 @@ const plot = {
   contours() {
     this.gContour.selectAll('*').remove();
     if (S.score === 'local') return;   // the local score is not a function of (log p_A, log p_B)
-    const T = tau(), n = 120, [a0, a1] = this.x.domain(), [b0, b1] = this.y.domain();
+    // Over the whole plane (wide screens: the window), so the level lines continue past the frame and fade out.
+    const T = tau(), pl = this.plane, n = WIDE.matches ? 160 : 120, [a0, a1] = pl.X, [b0, b1] = pl.Y;
     const vals = new Float64Array(n * n);
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
       const a = a0 + ((i + 0.5) / n) * (a1 - a0), b = b1 - ((j + 0.5) / n) * (b1 - b0);
@@ -332,7 +392,7 @@ const plot = {
     const sc = S.scoreArr, lo = d3.min(sc), hi = d3.max(sc);
     const levels = d3.range(1, 9).map((k) => lo + (k / 9) * (hi - lo));
     const proj = d3.geoTransform({ point(px, py) {
-      this.stream.point(plot.x.range()[0] + (px / n) * (plot.x.range()[1] - plot.x.range()[0]), plot.y.range()[1] + (py / n) * (plot.y.range()[0] - plot.y.range()[1]));
+      this.stream.point(pl.px[0] + (px / n) * (pl.px[1] - pl.px[0]), pl.py[1] + (py / n) * (pl.py[0] - pl.py[1]));
     } });
     const path = d3.geoPath(proj), cont = d3.contours().size([n, n]);
     const draw = (lv, strong) => this.gContour.append('path').attr('d', path(cont.contour(vals, lv)))
@@ -349,7 +409,7 @@ const plot = {
       for (const q of placed) if (Math.abs(q.x - it.x) < 160 && Math.abs(q.y - y) < 16) y = q.y + 16;
       placed.push({ x: it.x, y });
       it.ly = y;
-      it.anchor = it.x > this.W - 200 ? 'end' : 'start';
+      it.anchor = it.x > this.W - this.m.r - 200 ? 'end' : 'start';
     }
     this.gLbl.selectAll('text').data(items, (d) => d.i).join('text').attr('class', 'lbl')
       .attr('x', (d) => d.x + (d.anchor === 'end' ? -8 : 8)).attr('y', (d) => d.ly).attr('text-anchor', (d) => d.anchor)
@@ -433,7 +493,9 @@ function wire() {
     update();
   }));
   let rt = 0;
-  new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { if (S.pool) { plot.reset(); plot.draw(); valid.draw(S.scoreArr); } }, 150); }).observe($('#plot'));
+  // The frame follows the window and, on wide screens, the panels around it.
+  const ro = new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { if (S.pool) { plot.reset(); plot.draw(); valid.draw(S.scoreArr); } }, 150); });
+  ['#plot', '.dock', '#bar', '.rail'].forEach((s) => ro.observe($(s)));
 }
 
 // ---------------------------------------------------------------- the "?" explainers (js/explain.js renders them)
@@ -446,23 +508,23 @@ const ENSEMBLE_EXPLAIN = {
   tau: {
     title: 'τ: how the two prompts are combined',
     body: `<p>Each completion's score combines its two probabilities with a generalised mean:
-      $$\varphi_\tau(y) = \Big(\tfrac12\, p_A(y)^\tau + \tfrac12\, p_B(y)^\tau\Big)^{1/\tau}.$$</p>
+      $$\\varphi_\\tau(y) = \\Big(\\tfrac12\\, p_A(y)^\\tau + \\tfrac12\\, p_B(y)^\\tau\\Big)^{1/\\tau}.$$</p>
       <ul>
-        <li><b>min</b> ($\tau = -\infty$): only as good as the prompt that likes it less. Strict agreement.</li>
-        <li><b>harmonic</b> ($\tau = -1$) and <b>product</b> ($\tau \to 0$, $\sqrt{p_A p_B}$): agreement, less strictly. The product is the paper's main ensemble.</li>
-        <li><b>sum</b> ($\tau = 1$): a mixture; either prompt liking it helps.</li>
-        <li><b>max</b> ($\tau = +\infty$): good if either prompt likes it. Coverage.</li>
+        <li><b>min</b> ($\\tau = -\\infty$): only as good as the prompt that likes it less. Strict agreement.</li>
+        <li><b>harmonic</b> ($\\tau = -1$) and <b>product</b> ($\\tau \\to 0$, $\\sqrt{p_A p_B}$): agreement, less strictly. The product is the paper's main ensemble.</li>
+        <li><b>sum</b> ($\\tau = 1$): a mixture; either prompt liking it helps.</li>
+        <li><b>max</b> ($\\tau = +\\infty$): good if either prompt likes it. Coverage.</li>
       </ul>
-      <p>Each value of $\tau$ is the distribution closest to both prompts under one α-divergence ($\alpha = 1 - \tau$). The grey lines in the plot are where $\varphi_\tau$ is constant.</p>`,
+      <p>Each value of $\\tau$ is the distribution closest to both prompts under one α-divergence ($\\alpha = 1 - \\tau$). The grey lines in the plot are where $\\varphi_\\tau$ is constant.</p>`,
   },
   scored: {
     title: 'Global or local scores',
-    body: `<p><b>Global</b> scores each whole string: $\varphi_\tau(y)$ from the two prompts' probabilities of the complete completion. This is the ensemble the paper targets.</p>
+    body: `<p><b>Global</b> scores each whole string: $\\varphi_\\tau(y)$ from the two prompts' probabilities of the complete completion. This is the ensemble the paper targets.</p>
       <p><b>Local</b> uses the token-level product: at every step, multiply the two prompts' next-token probabilities and renormalise. That is how ensembling is usually done, and it is not the same thing. It rewards tokens both prompts like one at a time, so generic openings (“a”, “the”) gain and specific answers can lose (the paper's Fig. 1: “a great guy.” rises, “Carl Sagan.” falls). The local score exists only for the product, so τ is off while it is on.</p>`,
   },
   proposal: {
     title: 'Where the completions come from',
-    body: `<p>The completions are drawn from the token-level product of A and B: each next token is picked with probability proportional to $p_A \cdot p_B$ (at temperature $T'$). The probability of drawing a completion, $r(y)$, is recorded, so the ensemble's probabilities can be estimated from the pool (see <b>ensemble %</b> on the cards).</p>
+    body: `<p>The completions are drawn from the token-level product of A and B: each next token is picked with probability proportional to $p_A \\cdot p_B$ (at temperature $T'$). The probability of drawing a completion, $r(y)$, is recorded, so the ensemble's probabilities can be estimated from the pool (see <b>ensemble %</b> on the cards).</p>
       <p>The paper's Fig. 1 used beam search; drawing at random is needed here because the corrections need $r(y)$. Other choices (A alone, B alone, a mixture) are planned.</p>`,
   },
   model: {
@@ -478,7 +540,7 @@ const ENSEMBLE_EXPLAIN = {
       <p>Same weights, two different distributions: a chat model continuing bare text often writes as if in a worksheet or a forum; asked in its template, it answers. In both, the scores are exact probabilities of the same reply under each prompt.</p>`,
   },
   N: { title: 'Samples N', body: `<p>How many completions are drawn. The ranking and every readout are computed from these N; more completions represent the ensemble better.</p>` },
-  Tprime: { title: 'Sampling temperature T′', body: `<p>The temperature at which each token is drawn: $r(y_t \mid y_{<t}) \propto (p_A \cdot p_B)^{1/T'}$. At $T' = 1$ the draws follow the token-level product exactly.</p>` },
+  Tprime: { title: 'Sampling temperature T′', body: `<p>The temperature at which each token is drawn: $r(y_t \\mid y_{<t}) \\propto (p_A \\cdot p_B)^{1/T'}$. At $T' = 1$ the draws follow the token-level product exactly.</p>` },
   maxtok: { title: 'Max tokens', body: `<p>A completion stops at the end of its first sentence, or after this many tokens. One that hits the limit is marked “cut off”.</p>` },
   stop: {
     title: 'One sentence',
@@ -501,25 +563,25 @@ const ENSEMBLE_EXPLAIN = {
   },
   promptC: {
     title: 'The explicit prompt',
-    body: `<p>A third prompt that asks for both at once, e.g. “My favorite physicist and author is”. It is not used to choose anything; it checks which ensemble behaves like asking directly. In the paper the global ensemble agrees with it closely ($\rho = 0.96$) and the local one does not ($\rho = 0.09$).</p>`,
+    body: `<p>A third prompt that asks for both at once, e.g. “My favorite physicist and author is”. It is not used to choose anything; it checks which ensemble behaves like asking directly. In the paper the global ensemble agrees with it closely ($\\rho = 0.96$) and the local one does not ($\\rho = 0.09$).</p>`,
   },
   valid: {
     title: 'Checking against the explicit prompt',
-    body: `<p>Each dot is a completion: across, its ensemble score (global at the current $\tau$, or local); up, its log-probability after the explicit “A and B” prompt. $\rho$ is Spearman's rank correlation: 1 means both put the completions in the same order.</p>`,
+    body: `<p>Each dot is a completion: across, its ensemble score (global at the current $\\tau$, or local); up, its log-probability after the explicit “A and B” prompt. $\\rho$ is Spearman's rank correlation: 1 means both put the completions in the same order.</p>`,
   },
   ess: {
     title: 'Uses n of N completions',
     body: `<p>The effective sample size of the importance weights,
-      $$\mathrm{ESS} = \frac{(\sum_i w_i)^2}{\sum_i w_i^2},$$
+      $$\\mathrm{ESS} = \\frac{(\\sum_i w_i)^2}{\\sum_i w_i^2},$$
       between 1 and N. It says how many completions the estimate of $Z$ (and so every “ensemble %”) really rests on: when a few weights dominate, it is only as good as those few. The ranking itself does not depend on it.</p>`,
   },
   logZ: {
     title: 'log Ẑ',
-    body: `<p>The estimated normaliser of the ensemble, $\hat Z = \frac1N\sum_i w_i$: an unbiased estimate of $Z = \sum_y \varphi_\tau(y)$ over all strings. Small means the two prompts share little probability.</p>`,
+    body: `<p>The estimated normaliser of the ensemble, $\\hat Z = \\frac1N\\sum_i w_i$: an unbiased estimate of $Z = \\sum_y \\varphi_\\tau(y)$ over all strings. Small means the two prompts share little probability.</p>`,
   },
   prob: {
     title: 'Probability under the ensemble',
-    body: `<p>The completion's probability under the ensemble, $\Phi(y) = \varphi_\tau(y)/Z$. The score $\varphi_\tau(y)$ is exact; the normaliser $Z$, a sum over all strings, is estimated from the N completions ($\hat Z$, see log Ẑ). The list is ranked by $\varphi_\tau$, so the ranking is exact even when $\hat Z$ is rough.</p>`,
+    body: `<p>The completion's probability under the ensemble, $\\Phi(y) = \\varphi_\\tau(y)/Z$. The score $\\varphi_\\tau(y)$ is exact; the normaliser $Z$, a sum over all strings, is estimated from the N completions ($\\hat Z$, see log Ẑ). The list is ranked by $\\varphi_\\tau$, so the ranking is exact even when $\\hat Z$ is rough.</p>`,
   },
 };
 

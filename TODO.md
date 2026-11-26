@@ -50,9 +50,15 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   show little of either prompt's spread. Open: what the chat format should show (a higher T′ for the proposal?).
 - **"____." ranks 3rd for physicist × author** (Qwen3, text): a fill-in-the-blank completion. Relates to the open
   preset-wording item below.
-- **Layout (seen at 1600 × 1000, before the full-screen layout):** the cards' score lines break inside a field
-  ("log p B" on one line, "−10.0" on the next) and their "?" floats; in the plot, the labels "Richard Feynman." and
-  "Stephen Hawking." crowd each other. Recheck after the layout change.
+- **Plot labels still crowd:** "Richard Feynman." and "Stephen Hawking." (physicist × author) sit one under the other,
+  and Hawking's label is 16 px below its dot (the labels are only pushed apart vertically). Rechecked after the
+  full-page layout: unchanged.
+- **The page makes claims about the paper that have not been checked against it** (they came from the handoff):
+  the τ explainer says the product is "the paper's main ensemble" and that each τ is the distribution closest to
+  both prompts under an α-divergence with α = 1 − τ; the explicit-prompt explainer quotes the paper's ρ = 0.96
+  (global) and ρ = 0.09 (local). Check each against the paper's PDF (the conference version).
+- **The banner is stale:** "only the example pairs have completions so far", but live runs exist since
+  dpp-lm-demo e54c873 (they need Hugging Face sign-in; see the first item).
 
 ### Untested after the move
 - Hugging Face sign-in end to end, and a live run (/ensemble_sample) from this address.
@@ -69,9 +75,26 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   (or after `gh auth refresh -s workflow`).
 
 ### In progress (26 Nov)
-- The DPP demo's full-screen layout for this page: the plot fills the page, the controls and the ranked rail sit
-  beside it, readouts in a bar at the bottom (Tim).
 - When it has settled: send Robin Chan the link on Zulip (Tim).
+
+### Done (26 Nov)
+- **The diversity demo's full-page layout** (Tim): on wide screens the plot is the page. The title and the controls
+  float top left, the ranked rail runs down the right, the readouts (Uses n of N, log Ẑ) and View sit in a bar along
+  the bottom. The frame is the open area between them; the grid, the level lines and the diagonal continue under the
+  panels and fade out; two axes with arrowheads, no box. Narrower screens: one column (composer, plot with the bar
+  under it, rail), τ docked at the bottom of the screen. The page shows after its first render (html.booting).
+  - Differs from the diversity demo: the breakpoint is 1100 px, not 901 px (a 2-D scatter with axes needs the room
+    between the controls and the rail; at 1100 px the frame is about 320 px wide).
+  - Checked at 1920 × 1080, 1600 × 1000, 1280 × 800, 1100 × 760, and as a touch device at 1024 × 768 and 390 × 844:
+    nothing wider than the window, no console errors; τ at min, Scored local and an explainer checked at 1600 × 1000.
+    Checked with a DevTools-protocol script outside the repo: headless Chrome's --window-size lays the page out
+    87 px shorter than its screenshot and no narrower than ~500 px. This repo has no overflow test like
+    dpp-lm-demo's tests/overflow.cjs.
+- **Card meta lines** break between fields, never inside one ("log p_A −1.1" stays together).
+- **The explainers' maths was broken in 9 of 16** (since they were written in dpp-lm-demo ad96dde): the TeX sat in
+  JS template literals with single backslashes, so \varphi, \tau, \rho, \frac became control characters and
+  \sum, \mathrm, \hat lost their backslash. Doubled (54 backslashes); KaTeX now renders them with no errors.
+  dpp-lm-demo's copy (lab/ensemble.js) still has the bug.
 
 ## Prototype: the ensemble demo (prompt intersection, arXiv:2603.05432 Fig. 1)
 - Brief: docs/handoff-ensemble-demo.md. Built here as an unlinked lab page (lab/ensemble.html), to move
