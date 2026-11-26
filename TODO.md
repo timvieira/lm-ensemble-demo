@@ -10,6 +10,11 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   the visitor back to its own address (js/hfauth.js: `location.origin + location.pathname`), so
   https://timvieira.github.io/lm-ensemble-demo/ must be a redirect URI of the OAuth app (client 43d09d55-…,
   huggingface.co/settings/applications). Live runs need sign-in, so they fail here too until then.
+  Checked 26 Nov by asking Hugging Face's authorize endpoint for each address (no sign-in needed): dpp-lm-demo/ is
+  registered; lm-ensemble-demo/ is refused ("Invalid redirect_uri, must be one of the registered redirect_uris for
+  this client_id"), and so was the old address, dpp-lm-demo/lab/ensemble.html: sign-in on this page has never worked,
+  since live runs were added (dpp-lm-demo e54c873). Recheck after adding it (302 to the login page = registered):
+  `curl -s -o /dev/null -w '%{http_code}\n' -G https://huggingface.co/oauth/authorize --data-urlencode client_id=43d09d55-ee33-4a6f-8447-4731a6da25b9 --data-urlencode redirect_uri=https://timvieira.github.io/lm-ensemble-demo/ --data-urlencode response_type=code --data-urlencode 'scope=openid profile' --data-urlencode state=x --data-urlencode code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM --data-urlencode code_challenge_method=S256`
 - **The cloud session that built the prototype still points at dpp-lm-demo.** Point it at this repository. Its
   commits to dpp-lm-demo's lab/ensemble* no longer reach any page (that address redirects here). One commit landed
   there after the move (3af271a, empty completions labelled) and was ported here (72d3fb3). Before closing this item,
