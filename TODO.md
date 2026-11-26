@@ -50,6 +50,12 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   weight. Dessert × vegetable (chat): ESS 1.0 ("Cucumber" 99%). The page shows "Uses n of N", so this is disclosed,
   but nothing says how uncertain the percentages are. Open: what to do (more draws, a better proposal, SMC as in
   the paper, or showing the uncertainty).
+  Experiment (26 Nov, physicist × author, Qwen3 14B, text, 200, seed 0; one pool each, so the numbers are noisy). ESS at
+  min / harmonic / product / sum / max: T′ = 1 (the cached pool) 4.7 / 4.9 / 1.6 / 1.0 / 1.0, 84 distinct; T′ = 2 (drawn
+  on the Space) 24.9 / 28.7 / 52.1 / 7.4 / 7.2, 184 distinct, largest share at product 4% (was 79%). At T′ = 2 the
+  token-level proposal is ∝ √(p_A p_B), the page's product target token by token, so the weights reduce to the
+  per-step normalisers. For sum and max, a mixture of A and B is the matching proposal (at τ = 1 it is the target).
+  Asked by Tim: a better proposal, and SMC as in the paper (proposals in the reply of 26 Nov).
 - **The chat pools are nearly deterministic: 1 to 6 distinct completions in 200.** Painter × inventor is
   "Leonardo da Vinci" 200 times (hence ESS 200: equal weights, one string); physicist × author is 3 strings
   (Albert Einstein ×157, Stephen Hawking ×41, J.K. Rowling ×2); dessert × vegetable is "Carrot cake" in three
