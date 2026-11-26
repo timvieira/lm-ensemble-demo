@@ -12,6 +12,9 @@ const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmt = (x, d = 1) => (Number.isFinite(x) ? x.toFixed(d) : String(x));
 const xb = (k) => `<button type="button" class="xbtn" data-x="${k}" aria-label="Explain">?</button>`;
+// A completion can be empty: the text ends right after the prompt (a new line or a special token comes first).
+const EMPTY = '(nothing: it ends right away)';
+const shown = (s) => (s.text.trim() ? esc(s.text.trim()) : `<i class="empty-txt">${EMPTY}</i>`);
 const words = (t, n = 5) => { const w = t.trim().split(/\s+/); return w.length > n ? w.slice(0, n).join(' ') + '…' : w.join(' '); };
 
 const S = { presets: [], pool: null, groups: [], u: 0.5, K: 5, mode: 'map', score: 'global', draw: 1, sel: [], open: new Set(), hover: -1 };
@@ -243,7 +246,7 @@ function cards(rank, gProb) {
   $('#cards').innerHTML = list.map((g, r) => {
     const G = S.groups[g], s = P.samples[G.i];
     return `<li class="card${S.open.has(G.i) ? ' open' : ''}" data-i="${G.i}">
-      <div class="txt">${esc(s.text.trim())}${s.ended ? '' : ' …'}</div>
+      <div class="txt">${shown(s)}${s.ended ? '' : ' …'}</div>
       <div class="meta"><span class="rank">${r + 1}.</span>${top.has(G.i) ? '<span class="dot"></span>' : ''}${G.idx.length > 1 ? `×${G.idx.length} · ` : ''}log p<sub>A</sub> ${fmt(s.logpA)} · log p<sub>B</sub> ${fmt(s.logpB)} · ensemble ${pctOf(gProb[g])}${xb('prob')}${s.ended ? '' : `<span class="cutoff">cut off at ${s.nTokens} tokens</span>`}</div></li>`;
   }).join('');
   const more = $('#more');
@@ -350,7 +353,7 @@ const plot = {
     }
     this.gLbl.selectAll('text').data(items, (d) => d.i).join('text').attr('class', 'lbl')
       .attr('x', (d) => d.x + (d.anchor === 'end' ? -8 : 8)).attr('y', (d) => d.ly).attr('text-anchor', (d) => d.anchor)
-      .text((d) => words(S.pool.samples[d.i].text));
+      .text((d) => words(S.pool.samples[d.i].text) || EMPTY);
   },
   nearest(ev) {
     if (!this.pos) return -1;
@@ -372,7 +375,7 @@ function tip(i, ev) {
   const el = $('#tip');
   if (i < 0 || !S.pool) { el.hidden = true; return; }
   const s = S.pool.samples[i];
-  el.innerHTML = `${esc(s.text.trim())}${s.ended ? '' : ' …'}<div class="m">log p_A ${fmt(s.logpA, 2)} · log p_B ${fmt(s.logpB, 2)}${s.logpC != null ? ` · log p_C ${fmt(s.logpC, 2)}` : ''} · local ${fmt(s.loglocal, 2)}</div>`;
+  el.innerHTML = `${shown(s)}${s.ended ? '' : ' …'}<div class="m">log p_A ${fmt(s.logpA, 2)} · log p_B ${fmt(s.logpB, 2)}${s.logpC != null ? ` · log p_C ${fmt(s.logpC, 2)}` : ''} · local ${fmt(s.loglocal, 2)}</div>`;
   el.hidden = false;
   const r = el.getBoundingClientRect();
   el.style.left = Math.min(ev.clientX + 14, innerWidth - r.width - 8) + 'px';
