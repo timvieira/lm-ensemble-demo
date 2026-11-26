@@ -372,8 +372,9 @@ const ENSEMBLE_EXPLAIN = {
   },
   N: { title: 'Samples N', body: `<p>How many completions are drawn. Every score, selection and readout is computed from these N; more completions represent the ensemble better.</p>` },
   Tprime: { title: 'Sampling temperature T′', body: `<p>The temperature at which each token is drawn: $r(y_t \mid y_{<t}) \propto (p_A \cdot p_B)^{1/T'}$. At $T' = 1$ the draws follow the token-level product exactly.</p>` },
-  maxtok: { title: 'Max tokens', body: `<p>A completion stops at its first period, or after this many tokens. One that hits the limit is marked “cut off”.</p>` },
-  stop: { title: 'Stopping at a period', body: `<p>As in the paper, every completion is a short answer ending in a period. It also stops at an abbreviation (“Dr.”) or a decimal point (“0.”): an open choice for this prototype.</p>` },
+  maxtok: { title: 'Max tokens', body: `<p>A completion stops at the end of its first sentence, or after this many tokens. One that hits the limit is marked “cut off”.</p>` },
+  stop: { title: 'One sentence', body: `<p>As in the paper, every completion is a short answer ending in a period. A period ends it only when it ends a sentence: the next token starts with a space or ends the text, and the period is not part of an abbreviation (“Dr.”, “e.g.”) or an initial (“J. Robert Oppenheimer”). So “Dr. Richard Feynman.” is one completion, and “0.5” is not cut at “0.”.</p>
+      <p>Whether a period ends the sentence depends on what comes next, so that choice has a probability too: the total probability of all next tokens that start with a space or end the text. It is part of every score, so each score is still the exact probability of the completion ending there.</p>` },
   promptC: {
     title: 'The explicit prompt',
     body: `<p>A third prompt that asks for both at once, e.g. “My favorite physicist and author is”. It is not used to choose anything; it checks which ensemble behaves like asking directly. In the paper the global ensemble agrees with it closely ($\rho = 0.96$) and the local one does not ($\rho = 0.09$).</p>`,
