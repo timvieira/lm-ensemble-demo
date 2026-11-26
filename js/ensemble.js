@@ -361,14 +361,17 @@ const ENSEMBLE_EXPLAIN = {
   maxtok: { title: 'Max tokens', body: `<p>A completion stops at the end of its first sentence, or after this many tokens. One that hits the limit is marked “cut off”.</p>` },
   stop: {
     title: 'One sentence',
-    body: `<p>As in the paper, every completion is a short answer ending in a period. A period ends it when both hold:</p>
+    body: `<p>As in the paper, every completion is a short answer: one sentence, or one line. At every step, some next tokens would end it and the rest continue it; which ones end it depends on how the text so far ends. The rules follow the English rules of the pySBD sentence splitter that need only the next word:</p>
       <ul>
-        <li>the next token starts with a space or a new line, or ends the text, so “0.5” is not cut at “0.”;</li>
-        <li>the period does not belong to an abbreviation or an initial: Dr., Mr., Mrs., Ms., Prof., St., Jr., Sr., Mt., vs., Gen., Sen., Rev., Fr., Lt., Col., Capt., Sgt., e.g., i.e., U.S., U.K., a.k.a., or a single letter (“J. Robert Oppenheimer”).</li>
+        <li><b>A word and “.” or “?”</b> (“Richard Feynman.”): ends if the next token starts with a space or a new line, or ends the text. So “0.5” is not cut at “0.”.</li>
+        <li><b>“!”, “...”, or an abbreviation that can end a sentence</b> (Inc., etc., Jr., Jan., Calif., U.S., a.m., Ph.D., …): ends only before a capital letter, a new line or the end. “Apple Inc. and Google” goes on; “… Inc. The company …” ends.</li>
+        <li><b>No., pp., p., Art.</b>: not before a number (“No. 5”).</li>
+        <li><b>Titles and initials</b> (Dr., Mr., Mrs., Prof., Gov., Sen., St., …; “J.”; e.g.; i.e.): never end a sentence, so “Dr. Richard Feynman.” is one completion.</li>
+        <li><b>A new line</b> always ends a completion, with or without punctuation.</li>
       </ul>
-      <p>So “Dr. Richard Feynman.” is one completion. Otherwise it stops after the number of tokens in <b>Max tokens</b>, marked “cut off”.</p>
-      <p>Whether a period ends the sentence depends on what comes next, so that choice has a probability too: the total probability of all next tokens that start with a space or a new line, or end the text. It is part of every score, so each score is still the exact probability of the completion ending there.</p>
-      <p><b>Known gaps</b> (a heuristic, not a parser): a completion does not end at “?” or “!”, at a period inside quotes (“Whiskers.”), or at a line break without a period, so those run on; “Vitamin C.” is read as an initial; “Jr.” and “Sr.” never end one.</p>` },
+      <p>Closing quotes and brackets count with the mark: “Whiskers.” ends. Otherwise a completion stops after <b>Max tokens</b>, marked “cut off”.</p>
+      <p>Each ending is itself a choice with a probability: the total probability of all next tokens that would end the completion there. It is part of every score, so each score is still the exact probability of the completion ending there. One exception: a token that holds both text and a line break (such as “.” followed by a new line) ends the completion with that token's own probability, which leaves out other ways of writing the same text.</p>
+      <p><b>Known gaps</b> (a heuristic, not a parser): “Vitamin C.” reads as an initial; abbreviations missing from the lists end like ordinary words; a space on its own as a token counts as “starts with a space” whatever follows.</p>` },
   promptC: {
     title: 'The explicit prompt',
     body: `<p>A third prompt that asks for both at once, e.g. “My favorite physicist and author is”. It is not used to choose anything; it checks which ensemble behaves like asking directly. In the paper the global ensemble agrees with it closely ($\rho = 0.96$) and the local one does not ($\rho = 0.09$).</p>`,
