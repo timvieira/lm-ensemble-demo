@@ -359,8 +359,16 @@ const ENSEMBLE_EXPLAIN = {
   N: { title: 'Samples N', body: `<p>How many completions are drawn. The ranking and every readout are computed from these N; more completions represent the ensemble better.</p>` },
   Tprime: { title: 'Sampling temperature T′', body: `<p>The temperature at which each token is drawn: $r(y_t \mid y_{<t}) \propto (p_A \cdot p_B)^{1/T'}$. At $T' = 1$ the draws follow the token-level product exactly.</p>` },
   maxtok: { title: 'Max tokens', body: `<p>A completion stops at the end of its first sentence, or after this many tokens. One that hits the limit is marked “cut off”.</p>` },
-  stop: { title: 'One sentence', body: `<p>As in the paper, every completion is a short answer ending in a period. A period ends it only when it ends a sentence: the next token starts with a space or ends the text, and the period is not part of an abbreviation (“Dr.”, “e.g.”) or an initial (“J. Robert Oppenheimer”). So “Dr. Richard Feynman.” is one completion, and “0.5” is not cut at “0.”.</p>
-      <p>Whether a period ends the sentence depends on what comes next, so that choice has a probability too: the total probability of all next tokens that start with a space or end the text. It is part of every score, so each score is still the exact probability of the completion ending there.</p>` },
+  stop: {
+    title: 'One sentence',
+    body: `<p>As in the paper, every completion is a short answer ending in a period. A period ends it when both hold:</p>
+      <ul>
+        <li>the next token starts with a space or a new line, or ends the text, so “0.5” is not cut at “0.”;</li>
+        <li>the period does not belong to an abbreviation or an initial: Dr., Mr., Mrs., Ms., Prof., St., Jr., Sr., Mt., vs., Gen., Sen., Rev., Fr., Lt., Col., Capt., Sgt., e.g., i.e., U.S., U.K., a.k.a., or a single letter (“J. Robert Oppenheimer”).</li>
+      </ul>
+      <p>So “Dr. Richard Feynman.” is one completion. Otherwise it stops after the number of tokens in <b>Max tokens</b>, marked “cut off”.</p>
+      <p>Whether a period ends the sentence depends on what comes next, so that choice has a probability too: the total probability of all next tokens that start with a space or a new line, or end the text. It is part of every score, so each score is still the exact probability of the completion ending there.</p>
+      <p><b>Known gaps</b> (a heuristic, not a parser): a completion does not end at “?” or “!”, at a period inside quotes (“Whiskers.”), or at a line break without a period, so those run on; “Vitamin C.” is read as an initial; “Jr.” and “Sr.” never end one.</p>` },
   promptC: {
     title: 'The explicit prompt',
     body: `<p>A third prompt that asks for both at once, e.g. “My favorite physicist and author is”. It is not used to choose anything; it checks which ensemble behaves like asking directly. In the paper the global ensemble agrees with it closely ($\rho = 0.96$) and the local one does not ($\rho = 0.09$).</p>`,
