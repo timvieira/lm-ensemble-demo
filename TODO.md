@@ -25,7 +25,6 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   dpp-lm-demo's data/ensemble/ and data/ here. Open: whether it moves here later.
 - **The unused copies in dpp-lm-demo.** Decided (Tim, 26 Nov): lab/ensemble*.js, data/ensemble/,
   tests/ensemble.test.mjs and docs/handoff-ensemble-demo.md stay there. They will drift from the copies here.
-- **A permanent local clone** (e.g. ~/projects/lm-ensemble-demo)? Today's working copy was in a temporary folder.
 - **Maths typesetting.** The page typesets its explainers with KaTeX and writes symbols in labels, axes and cards as
   Unicode (τ, Ẑ, log p(· | …)). Tim's global rule asks for MathJax (SVG) for every symbol in every page; the
   handoff (B4, A8) says KaTeX. Does the rule apply to the demos?
@@ -88,6 +87,7 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   (Zulip user 253) through the Zulip API with ~/zuliprc on Tim's laptop.
 
 ### Done (26 Nov)
+- **A local clone** at ~/projects/lm-ensemble-demo on Tim's laptop (Tim, 26 Nov).
 - **The diversity demo's full-page layout** (Tim): on wide screens the plot is the page. The title and the controls
   float top left, the ranked rail runs down the right, the readouts (Uses n of N, log Ẑ) and View sit in a bar along
   the bottom. The frame is the open area between them; the grid, the level lines and the diagonal continue under the
