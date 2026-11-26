@@ -257,7 +257,8 @@ function readouts(score) {
     [`log Ẑ${xb('logZ')}`, fmt(S.sum.logZ, 2)],
   ];
   $('#readout').innerHTML = rows.map(([k, v]) => `<span class="stat"><span>${k}</span><span class="v">${v}</span></span>`).join('');
-  $('#bar-note').textContent = matchMedia('(pointer: fine)').matches ? 'hover a point to read it' : '';
+  // The gestures, as on the diversity demo's bar.
+  $('#bar-note').textContent = `${matchMedia('(pointer: coarse)').matches ? 'two fingers to move' : 'Shift-drag to move'} · tap a point to read it`;
 }
 
 const SHOWN = 10, LABELLED = 5;   // display only: the list shows ten until "Show all"; the plot labels five
@@ -283,9 +284,14 @@ function cards(rank, gProb) {
 }
 
 // ---------------------------------------------------------------- the plot: (log p_A, log p_B)
+// Pan and zoom with the diversity demo's gestures (its Plot2D): the wheel or a pinch zooms; Shift-drag, right-drag or two
+// fingers move; double-click returns to the first view; a plain drag does nothing. A mouse reads a point by hovering,
+// a finger by tapping. The view belongs to the visitor until another pool is shown; a resize keeps it.
 const plot = {
   svg: null,
-  reset() { this.x = null; },
+  zt: d3.zoomIdentity,
+  reset() { this.bx = null; this.zt = d3.zoomIdentity; this.svg?.property('__zoom', d3.zoomIdentity); },
+  reframe() { this.bx = null; },   // the window or the panels changed size: frame again, keep the pan and zoom
   build() {
     const svg = d3.select('#plot');
     svg.selectAll('*').remove();
@@ -297,6 +303,8 @@ const plot = {
     this.fadeGrad.append('stop').attr('offset', 1).attr('stop-color', '#fff').attr('stop-opacity', 0);
     this.fadeRect = defs.append('mask').attr('id', 'plane-fade').attr('maskUnits', 'userSpaceOnUse')
       .append('rect').attr('fill', 'url(#plane-fade-g)');
+    // Points and labels stay inside the frame (a few px of slack), so zooming in never spills them over the axes.
+    this.clipRect = defs.append('clipPath').attr('id', 'plot-frame-clip').append('rect');
     defs.append('marker').attr('id', 'axis-arrowhead').attr('viewBox', '0 0 10 10').attr('refX', 9).attr('refY', 5)
       .attr('markerWidth', 7).attr('markerHeight', 7).attr('orient', 'auto')
       .append('path').attr('d', 'M0,1 L9,5 L0,9 z').attr('fill', css('--text-2'));
@@ -304,16 +312,27 @@ const plot = {
     this.gGrid = this.gPlane.append('g');
     this.gContour = this.gPlane.append('g');
     this.gDiag = this.gPlane.append('g');
-    this.gDot = svg.append('g');
-    this.gSel = svg.append('g');
-    this.gLbl = svg.append('g');
+    const gPts = svg.append('g').attr('clip-path', 'url(#plot-frame-clip)');
+    this.gDot = gPts.append('g');
+    this.gSel = gPts.append('g');
+    this.gLbl = gPts.append('g');
     this.gAxis = svg.append('g');
     this.svg = svg;
-    svg.on('pointermove', (ev) => { const i = this.nearest(ev); this.highlight(i); tip(i, ev); })
-      .on('pointerleave', () => { this.highlight(-1); tip(-1); });
+    this.zoom = d3.zoom().scaleExtent([0.2, 50])
+      .filter((e) => e.type === 'wheel' || (e.type === 'mousedown' && (e.shiftKey || e.button === 2)) || (e.type === 'touchstart' && e.touches.length >= 2))
+      .on('zoom', (e) => {
+        this.zt = e.transform; tip(-1);
+        cancelAnimationFrame(this.raf); this.raf = requestAnimationFrame(() => this.draw());   // at most once a frame
+      });
+    svg.call(this.zoom).on('dblclick.zoom', null)
+      .on('dblclick', () => svg.call(this.zoom.transform, d3.zoomIdentity))
+      .on('contextmenu', (e) => e.preventDefault());
+    svg.on('pointermove', (ev) => { if (ev.pointerType !== 'mouse') return; const i = this.nearest(ev, 14); this.highlight(i); tip(i, ev); })
+      .on('pointerleave', (ev) => { if (ev.pointerType === 'mouse') { this.highlight(-1); tip(-1); } })
+      .on('click', (ev) => { const i = this.nearest(ev, ev.pointerType === 'mouse' ? 14 : 28); this.highlight(i); tip(i, ev); });
   },
   frame() {
-    // Framed once per pool and layout (the view never moves with τ or the scores), over every completion.
+    // The first view of a pool and layout, over every completion; pan and zoom then move the view from here.
     // Wide screens: the svg is the whole window, and the frame is the open area between the controls, the rail and
     // the bar; the plane (grid, level lines, diagonal) continues under the panels and fades out. Narrow screens: the
     // svg is a box in the page, and the frame is the box less its margins.
@@ -324,25 +343,44 @@ const plot = {
       m = { l: d.right + 64, r: W - r.left + 40, t: 40, b: H - b.top + 56 };
     }
     const ext = (k) => { const v = P.map((s) => s[k]); const lo = d3.min(v), hi = d3.max(v), p = 0.04 * (hi - lo || 1); return [lo - p, hi + p]; };
-    this.W = W; this.H = H; this.m = m;
-    this.x = d3.scaleLinear().domain(ext('logpA')).range([m.l, W - m.r]);
-    this.y = d3.scaleLinear().domain(ext('logpB')).range([H - m.b, m.t]);
-    // The plane's extent, in data units and in pixels: the whole window (wide) or the frame.
-    this.plane = wide
-      ? { X: [this.x.invert(0), this.x.invert(W)], Y: [this.y.invert(H), this.y.invert(0)], px: [0, W], py: [H, 0] }
-      : { X: this.x.domain(), Y: this.y.domain(), px: this.x.range(), py: this.y.range() };
+    Object.assign(this, { W, H, m, wide });
+    this.bx = d3.scaleLinear().domain(ext('logpA')).range([m.l, W - m.r]);
+    this.by = d3.scaleLinear().domain(ext('logpB')).range([H - m.b, m.t]);
     const cx = (m.l + W - m.r) / 2, cy = (m.t + H - m.b) / 2;
     const R = Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy)), half = Math.hypot((W - m.r - m.l) / 2, (H - m.b - m.t) / 2);
     this.fadeGrad.attr('cx', cx).attr('cy', cy).attr('r', R).select('.in').attr('offset', Math.min(0.98, half / R));
     this.fadeRect.attr('width', W).attr('height', H);
     this.gPlane.attr('mask', wide ? 'url(#plane-fade)' : null);
-    // Ticks and grid lines by the frame's size in pixels: about one labelled tick per 90 px across and 70 px up,
-    // and a grid line every 60 px or so.
-    const fw = W - m.r - m.l, fh = H - m.b - m.t;
-    const ax = this.gAxis;
+    this.clipRect.attr('x', m.l - 8).attr('y', m.t - 8).attr('width', W - m.r - m.l + 16).attr('height', H - m.b - m.t + 16);
+  },
+  draw() {
+    if (!S.pool) return;
+    if (!this.svg) this.build();
+    if (!this.bx) this.frame();
+    const { W, H, m, wide } = this, x = (this.x = this.zt.rescaleX(this.bx)), y = (this.y = this.zt.rescaleY(this.by));
+    // The plane's extent for this view, in data units and in pixels: the whole window (wide) or the frame.
+    this.plane = wide
+      ? { X: [x.invert(0), x.invert(W)], Y: [y.invert(H), y.invert(0)], px: [0, W], py: [H, 0] }
+      : { X: x.domain(), Y: y.domain(), px: x.range(), py: y.range() };
+    this.axes();
+    this.grid();
+    this.contours();
+    const P = S.pool.samples, sel = new Set(S.sel);
+    this.pos = P.map((s) => [x(s.logpA), y(s.logpB)]);
+    this.gDot.selectAll('circle').data(d3.range(P.length)).join('circle')
+      .attr('cx', (i) => this.pos[i][0]).attr('cy', (i) => this.pos[i][1]).attr('r', 2.3)
+      .attr('fill', css('--ink')).attr('fill-opacity', 0.55);
+    this.gSel.selectAll('circle').data(S.sel, (i) => i).join('circle')
+      .attr('cx', (i) => this.pos[i][0]).attr('cy', (i) => this.pos[i][1]).attr('r', 4.2)
+      .attr('fill', css('--accent')).attr('stroke', css('--surface')).attr('stroke-width', 1);
+    this.labels(sel);
+  },
+  axes() {
+    // Ticks by the frame's size in pixels: about one labelled tick per 90 px across and 70 px up.
+    const { W, H, m, wide, x, y } = this, fw = W - m.r - m.l, fh = H - m.b - m.t, ax = this.gAxis;
     ax.selectAll('*').remove();
-    const xa = ax.append('g').attr('class', 'tick-x').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(this.x).ticks(Math.max(3, Math.round(fw / 90))).tickSize(4));
-    const ya = ax.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(this.y).ticks(Math.max(3, Math.round(fh / 70))).tickSize(4));
+    const xa = ax.append('g').attr('class', 'tick-x').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(Math.max(3, Math.round(fw / 90))).tickSize(4));
+    const ya = ax.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(Math.max(3, Math.round(fh / 70))).tickSize(4));
     if (wide) {
       // No box around the plot: two axes with small arrowheads, as on the diversity demo.
       xa.select('.domain').remove(); ya.select('.domain').remove();
@@ -353,31 +391,19 @@ const plot = {
       .text(`log p( · | “${S.pool.prompts.A}”)`);
     ax.append('text').attr('class', 'axis-lab').attr('transform', `translate(${m.l - 42},${(m.t + H - m.b) / 2}) rotate(-90)`).attr('text-anchor', 'middle')
       .text(`log p( · | “${S.pool.prompts.B}”)`);
-    // Soft grid over the plane.
-    this.gGrid.selectAll('*').remove();
-    const g = this.gGrid, grid = css('--grid'), pl = this.plane;
+  },
+  grid() {
+    // Soft grid over the plane, a line every 60 px or so; and the diagonal log p_A = log p_B, where every member of
+    // the family agrees.
+    const { W, H, m, x, y } = this, pl = this.plane, g = this.gGrid, grid = css('--grid');
     const lines = ([lo, hi], [f0, f1], px) => { const st = d3.tickStep(f0, f1, Math.max(4, Math.round(px / 60))); return d3.range(Math.ceil(lo / st) * st, hi, st); };
-    lines(pl.X, this.x.domain(), fw).forEach((v) => g.append('line').attr('x1', this.x(v)).attr('x2', this.x(v)).attr('y1', pl.py[1]).attr('y2', pl.py[0]).attr('stroke', grid));
-    lines(pl.Y, this.y.domain(), fh).forEach((v) => g.append('line').attr('y1', this.y(v)).attr('y2', this.y(v)).attr('x1', pl.px[0]).attr('x2', pl.px[1]).attr('stroke', grid));
-    // The diagonal log p_A = log p_B, where every member of the family agrees.
+    g.selectAll('*').remove();
+    lines(pl.X, [x.invert(m.l), x.invert(W - m.r)], W - m.r - m.l).forEach((v) => g.append('line').attr('x1', x(v)).attr('x2', x(v)).attr('y1', pl.py[1]).attr('y2', pl.py[0]).attr('stroke', grid));
+    lines(pl.Y, [y.invert(H - m.b), y.invert(m.t)], H - m.b - m.t).forEach((v) => g.append('line').attr('y1', y(v)).attr('y2', y(v)).attr('x1', pl.px[0]).attr('x2', pl.px[1]).attr('stroke', grid));
     const [a0, a1] = pl.X, [b0, b1] = pl.Y, lo = Math.max(a0, b0), hi = Math.min(a1, b1);
     this.gDiag.selectAll('*').remove();
-    if (hi > lo) this.gDiag.append('line').attr('x1', this.x(lo)).attr('y1', this.y(lo)).attr('x2', this.x(hi)).attr('y2', this.y(hi))
+    if (hi > lo) this.gDiag.append('line').attr('x1', x(lo)).attr('y1', y(lo)).attr('x2', x(hi)).attr('y2', y(hi))
       .attr('stroke', css('--muted')).attr('stroke-dasharray', '3 4').attr('stroke-width', 1);
-    this.pos = P.map((s) => [this.x(s.logpA), this.y(s.logpB)]);
-  },
-  draw() {
-    if (!this.svg) this.build();
-    if (!this.x) this.frame();
-    const P = S.pool.samples, sel = new Set(S.sel);
-    this.contours();
-    this.gDot.selectAll('circle').data(d3.range(P.length)).join('circle')
-      .attr('cx', (i) => this.pos[i][0]).attr('cy', (i) => this.pos[i][1]).attr('r', 2.3)
-      .attr('fill', css('--ink')).attr('fill-opacity', 0.55);
-    this.gSel.selectAll('circle').data(S.sel, (i) => i).join('circle')
-      .attr('cx', (i) => this.pos[i][0]).attr('cy', (i) => this.pos[i][1]).attr('r', 4.2)
-      .attr('fill', css('--accent')).attr('stroke', css('--surface')).attr('stroke-width', 1);
-    this.labels(sel);
   },
   contours() {
     this.gContour.selectAll('*').remove();
@@ -402,7 +428,9 @@ const plot = {
     levels.forEach((lv) => draw(lv, false));
   },
   labels(sel) {
-    const items = S.sel.map((i) => ({ i, x: this.pos[i][0], y: this.pos[i][1] })).sort((a, b) => a.y - b.y);
+    // Only points inside the frame are labelled: after a pan or zoom, a label for a point outside would be cut off.
+    const { W, H, m } = this, inside = ([x, y]) => x >= m.l - 4 && x <= W - m.r + 4 && y >= m.t - 4 && y <= H - m.b + 4;
+    const items = S.sel.filter((i) => inside(this.pos[i])).map((i) => ({ i, x: this.pos[i][0], y: this.pos[i][1] })).sort((a, b) => a.y - b.y);
     const placed = [];
     for (const it of items) {
       let y = it.y + 4;
@@ -415,10 +443,10 @@ const plot = {
       .attr('x', (d) => d.x + (d.anchor === 'end' ? -8 : 8)).attr('y', (d) => d.ly).attr('text-anchor', (d) => d.anchor)
       .text((d) => words(S.pool.samples[d.i].text) || EMPTY);
   },
-  nearest(ev) {
+  nearest(ev, r) {
     if (!this.pos) return -1;
     const [px, py] = d3.pointer(ev, this.svg.node());
-    let best = -1, bd = 14 * 14;
+    let best = -1, bd = r * r;
     this.pos.forEach(([a, b], i) => { const d = (a - px) ** 2 + (b - py) ** 2; if (d < bd) { bd = d; best = i; } });
     return best;
   },
@@ -494,7 +522,7 @@ function wire() {
   }));
   let rt = 0;
   // The frame follows the window and, on wide screens, the panels around it.
-  const ro = new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { if (S.pool) { plot.reset(); plot.draw(); valid.draw(S.scoreArr); } }, 150); });
+  const ro = new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { if (S.pool) { plot.reframe(); plot.draw(); valid.draw(S.scoreArr); } }, 150); });
   ['#plot', '.dock', '#bar', '.rail'].forEach((s) => ro.observe($(s)));
 }
 

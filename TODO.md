@@ -67,7 +67,7 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
 
 ### Untested after the move
 - Hugging Face sign-in end to end, and a live run (/ensemble_sample) from this address.
-- The page on a phone.
+- The page on a real phone; pinch and two-finger moves on a real touch screen (not simulated: d3.zoom's own touch handling).
 
 ### Notes
 - The repository was created as timvieira/prompt-intersection and renamed lm-ensemble-demo the same day (Tim);
@@ -97,6 +97,14 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
     dpp-lm-demo's tests/overflow.cjs.
 - **The redirect** from dpp-lm-demo's lab/ensemble.html keeps the query string and fragment (checked live:
   `?x=1#y` lands on https://timvieira.github.io/lm-ensemble-demo/?x=1#y).
+- **Pan and zoom, as on the diversity demo** (its Plot2D; missed in the first port of the layout, Tim asked): the wheel
+  or a pinch zooms (0.2× to 50×); Shift-drag, right-drag or two fingers move; double-click returns to the first view;
+  a plain drag does nothing. Axes, grid, level lines and the diagonal follow the view; points and labels are clipped
+  to the frame, and only points inside it are labelled. A resize keeps the view; another pool starts from the first
+  view. A mouse reads a point by hovering, a finger by tapping (28 px radius). On narrow screens one finger scrolls
+  the page over the plot (touch-action: pan-y). Checked headless at 1600 × 1000 with synthetic events (wheel ×5 =
+  2×, Shift-drag, plain drag, double-click; about 20 ms from a wheel step to the next drawn frame) and a tap at
+  390 × 844.
 - **Card meta lines** break between fields, never inside one ("log p_A −1.1" stays together).
 - **The explainers' maths was broken in 9 of 16** (since they were written in dpp-lm-demo ad96dde): the TeX sat in
   JS template literals with single backslashes, so \varphi, \tau, \rho, \frac became control characters and

@@ -202,7 +202,7 @@
     .dock { display: contents; }
     .step-1 { order: 0; }
     .stage { order: 1; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r) var(--r) 0 0; }
-    #plot { height: 55vh; min-height: 320px; }
+    #plot { height: 55vh; min-height: 320px; touch-action: pan-y; }   /* one finger scrolls the page; two move or zoom the plot */
     /* the readouts: a bar attached to the bottom of the plot */
     .bar { order: 2; margin-top: -11px; background: var(--surface); border: 1px solid var(--border); border-radius: 0 0 var(--r) var(--r); padding: 6px 12px; }
     .rail { order: 3; border: 1px solid var(--border); border-radius: var(--r); padding: 12px 14px 20px; }
