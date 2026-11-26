@@ -112,6 +112,7 @@ function update() {
   let sel;
   if (S.mode === 'map') sel = d3.range(S.groups.length).sort((a, b) => gScore[b] - gScore[a]).slice(0, K);
   else sel = sampleWOR(gLogv, K, mulberry32(1000 * S.draw + 7));
+  sel.sort((a, b) => gScore[b] - gScore[a]);   // shown by their score under the ensemble, in both modes
   S.sel = sel.map((g) => S.groups[g].i);
   Object.assign(S, { scoreArr: score, gShare, sum, selGroups: sel });
   readouts(score);
