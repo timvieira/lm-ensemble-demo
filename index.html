@@ -185,12 +185,13 @@
           <summary class="chip" aria-label="Settings"><span id="adv-sum">Qwen3 14B · 200 samples</span></summary>
           <div class="menu">
             <label class="field wide"><span class="lab">Model<button type="button" class="xbtn" data-x="model" aria-label="About the model">?</button></span><select id="model"><option value="qwen3-14b">Qwen3 14B, 4-bit (AWQ) · Modal</option></select></label>
+            <label class="field wide"><span class="lab">Prompt format<button type="button" class="xbtn" data-x="format" aria-label="What is the prompt format?">?</button></span><select id="fmt"><option value="text" selected>Continue text (as in the paper)</option><option value="chat">Chat (messages and replies)</option></select></label>
             <label class="field wide"><span class="lab">Drawn from<button type="button" class="xbtn" data-x="proposal" aria-label="How are the completions drawn?">?</button></span><select id="proposal"><option value="local_product">the token-level product of A and B</option></select></label>
             <label class="field"><span class="lab">Samples N<button type="button" class="xbtn" data-x="N" aria-label="What is N?">?</button></span><input id="n" type="number" min="2" max="200" step="10" value="200"></label>
             <label class="field"><span class="lab">Temp. T′<button type="button" class="xbtn" data-x="Tprime" aria-label="What is T′?">?</button></span><input id="tp" type="number" min="0.2" max="2" step="0.1" value="1.0"></label>
             <label class="field"><span class="lab">Max tokens<button type="button" class="xbtn" data-x="maxtok" aria-label="What is max tokens?">?</button></span><input id="maxtok" type="number" min="8" max="256" step="8" value="32"></label>
             <label class="field wide"><span class="lab">The explicit “A and B” prompt, for checking<button type="button" class="xbtn" data-x="promptC" aria-label="What is the explicit prompt?">?</button></span><textarea id="pc" rows="2" spellcheck="false" placeholder="e.g. My favorite physicist and author is"></textarea></label>
-            <p class="menu-note">Each completion is one sentence.<button type="button" class="xbtn" data-x="stop" aria-label="When does a completion end?">?</button></p>
+            <p class="menu-note" id="fmt-note"></p>
           </div>
         </details>
         <span class="grow"></span>

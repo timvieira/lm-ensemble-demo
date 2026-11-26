@@ -1,12 +1,22 @@
 [
   { "id": "physicist_author", "label": "Physicist × author (the paper's Fig. 1)",
-    "A": "My favorite physicist is", "B": "My favorite author is", "C": "My favorite physicist and author is" },
+    "text": { "A": "My favorite physicist is", "B": "My favorite author is", "C": "My favorite physicist and author is" },
+    "chat": { "A": "Name a famous physicist. Reply with just the name.", "B": "Name a famous author. Reply with just the name.",
+              "C": "Name a famous physicist who is also an author. Reply with just the name." } },
   { "id": "scientist_musician", "label": "Scientist × musician",
-    "A": "A famous scientist is", "B": "A famous musician is", "C": "A famous scientist and musician is" },
+    "text": { "A": "My favorite scientist is", "B": "My favorite musician is", "C": "My favorite scientist and musician is" },
+    "chat": { "A": "Name a famous scientist. Reply with just the name.", "B": "Name a famous musician. Reply with just the name.",
+              "C": "Name a famous scientist who is also a musician. Reply with just the name." } },
   { "id": "painter_inventor", "label": "Painter × inventor",
-    "A": "A famous painter is", "B": "A famous inventor is", "C": "A famous painter and inventor is" },
+    "text": { "A": "My favorite painter is", "B": "My favorite inventor is", "C": "My favorite painter and inventor is" },
+    "chat": { "A": "Name a famous painter. Reply with just the name.", "B": "Name a famous inventor. Reply with just the name.",
+              "C": "Name a famous painter who was also an inventor. Reply with just the name." } },
   { "id": "dog_cat_name", "label": "Dog name × cat name",
-    "A": "A good name for a dog is", "B": "A good name for a cat is", "C": "A good name for both a dog and a cat is" },
+    "text": { "A": "I named my dog", "B": "I named my cat", "C": "I gave my dog and my cat the same name:" },
+    "chat": { "A": "Suggest a name for a dog. Reply with just the name.", "B": "Suggest a name for a cat. Reply with just the name.",
+              "C": "Suggest a name that suits both a dog and a cat. Reply with just the name." } },
   { "id": "dessert_vegetable", "label": "Dessert × vegetable (little overlap)",
-    "A": "My favorite dessert is", "B": "My favorite vegetable is", "C": "My favorite dessert that is also a vegetable is" }
+    "text": { "A": "My favorite dessert is", "B": "My favorite vegetable is", "C": "My favorite dessert made from a vegetable is" },
+    "chat": { "A": "Name a dessert. Reply with just its name.", "B": "Name a vegetable. Reply with just its name.",
+              "C": "Name a dessert made from a vegetable. Reply with just its name." } }
 ]

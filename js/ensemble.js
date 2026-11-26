@@ -19,42 +19,67 @@ async function init() {
   Object.assign(EXPLAIN, ENSEMBLE_EXPLAIN);
   initExplainers();
   S.presets = await (await fetch(DATA + 'presets.json')).json();
-  const ex = $('#examples');
-  ex.innerHTML = '<div class="menu-head">Example pairs</div>' + S.presets.map((p, i) =>
-    `<button type="button" role="menuitem" data-i="${i}"><b>${esc(p.label)}</b><span>${esc(p.A)} · ${esc(p.B)}</span></button>`).join('');
-  ex.querySelectorAll('button').forEach((b) => (b.onclick = () => { $('#exmenu').open = false; fill(S.presets[+b.dataset.i]); settingsChanged(); }));
   wire();
+  fillExamples();
   fill(S.presets[0]);
   await settingsChanged();
+}
+
+// The prompt format: "text" continues the prompts as plain text (the paper's Fig. 1); "chat" puts them in the
+// model's chat template as user messages, and the completions are its replies. Same weights either way.
+const pfmt = () => $('#fmt').value;   // the prompt format
+const FORMAT_UI = {
+  text: { a: 'Prompt A, e.g. My favorite physicist is', b: 'Prompt B, e.g. My favorite author is', c: 'e.g. My favorite physicist and author is',
+    note: 'Each completion is one sentence.<button type="button" class="xbtn" data-x="stop" aria-label="When does a completion end?">?</button>' },
+  chat: { a: 'Message A, e.g. Name a famous physicist.', b: 'Message B, e.g. Name a famous author.', c: 'e.g. Name a famous physicist who is also an author.',
+    note: 'Each reply ends where the model ends its turn.' },
+};
+function fillExamples() {
+  const ex = $('#examples'), f = pfmt();
+  ex.innerHTML = '<div class="menu-head">Example pairs</div>' + S.presets.map((p, i) =>
+    `<button type="button" role="menuitem" data-i="${i}"><b>${esc(p.label)}</b><span>${esc(p[f].A)} · ${esc(p[f].B)}</span></button>`).join('');
+  ex.querySelectorAll('button').forEach((b) => (b.onclick = () => { $('#exmenu').open = false; fill(S.presets[+b.dataset.i]); settingsChanged(); }));
+  const u = FORMAT_UI[f];
+  $('#pa').placeholder = u.a; $('#pb').placeholder = u.b; $('#pc').placeholder = u.c;
+  $('#fmt-note').innerHTML = u.note;
+}
+function setFormat() {
+  // An example pair keeps being that example in the other format; typed prompts stay as typed.
+  const was = pfmt() === 'chat' ? 'text' : 'chat', c = readConfig();
+  const p = S.presets.find((x) => x[was].A === c.A && x[was].B === c.B);
+  fillExamples();
+  if (p) fill(p);
+  settingsChanged();
 }
 
 // ---------------------------------------------------------------- the composer
 // Cached pools exist only for the example pairs at their settings; anything else needs a live run, which this
 // prototype does not have yet (docs/handoff-ensemble-demo.md, A7). The page says so instead of hiding the controls.
 const DEFAULTS = { N: 200, Tprime: 1.0, maxNewTokens: 32 };
-function fill(p) { $('#pa').value = p.A; $('#pb').value = p.B; $('#pc').value = p.C ?? ''; syncGo(); }
+function fill(p) { const q = p[pfmt()]; $('#pa').value = q.A; $('#pb').value = q.B; $('#pc').value = q.C ?? ''; syncGo(); }
 function readConfig() {
   return { A: $('#pa').value.trim(), B: $('#pb').value.trim(), C: $('#pc').value.trim(),
     N: Math.round(+$('#n').value), Tprime: Math.round(10 * +$('#tp').value) / 10, maxNewTokens: Math.round(+$('#maxtok').value) };
 }
 function cachedFor(c) {
-  const p = S.presets.find((x) => x.A === c.A && x.B === c.B);
+  const f = pfmt(), p = S.presets.find((x) => x[f].A === c.A && x[f].B === c.B);
   const same = c.N === DEFAULTS.N && c.Tprime === DEFAULTS.Tprime && c.maxNewTokens === DEFAULTS.maxNewTokens;
-  return p && same && (!c.C || c.C === p.C) ? p : null;
+  return p && same && (!c.C || c.C === p[f].C) ? p : null;
 }
+const poolKey = (p) => `${p.id}.${pfmt()}`;
 function syncGo() { $('#go').disabled = !($('#pa').value.trim() && $('#pb').value.trim()); $('#adv-sum').textContent = `Qwen3 14B · ${$('#n').value} samples`; }
 async function settingsChanged() {
   syncGo();
   const c = readConfig(), p = cachedFor(c);
-  if (p) { if (S.pool?.id !== p.id) await load(p.id); stageMsg(null); return; }
+  if (p) { if (S.poolKey !== poolKey(p)) await load(poolKey(p)); stageMsg(null); return; }
   if (S.pool) setStatus('The plot is from earlier prompts or settings. Press ↑.');
 }
 function run() {
   const c = readConfig();
   if (!c.A || !c.B) return;
   const p = cachedFor(c);
-  if (p) { load(p.id); stageMsg(null); return; }
-  const near = S.presets.find((x) => x.A === c.A && x.B === c.B);
+  if (p) { load(poolKey(p)); stageMsg(null); return; }
+  const near = S.presets.find((x) => x[pfmt()].A === c.A && x[pfmt()].B === c.B);
   stageMsg(near
     ? { title: 'No completions for these settings yet.',
         detail: `This prototype has completions for the example pairs at N ${DEFAULTS.N}, T′ ${DEFAULTS.Tprime.toFixed(1)} and ${DEFAULTS.maxNewTokens} tokens only.`,
@@ -78,11 +103,11 @@ function stageMsg(m) {
 }
 function setStatus(t) { $('#status').textContent = t; }
 
-async function load(id) {
-  const r = await fetch(DATA + id + '.json').catch(() => null);
+async function load(key) {
+  const r = await fetch(DATA + key + '.json').catch(() => null);
   if (!r || !r.ok) { stageMsg({ title: 'These completions could not be loaded.', detail: 'Reload the page to try again.', actions: '' }); return; }
   const pool = await r.json();
-  S.pool = pool;
+  S.pool = pool; S.poolKey = key;
   setStatus(`${pool.standIn ? 'Stand-in data' : 'Cached'}: ${pool.N} completions from ${pool.model.split('/').pop()}, drawn on ${pool.standIn ? 'a CPU' : 'Modal'}.`);
   // One group per distinct string; copies share every score.
   const byText = new Map();
@@ -309,6 +334,7 @@ function wire() {
     S.u = u;
     cancelAnimationFrame(raf); raf = requestAnimationFrame(update);
   };
+  $('#fmt').onchange = setFormat;
   ['#pa', '#pb', '#pc', '#n', '#tp', '#maxtok'].forEach((id) => $(id).addEventListener('input', () => { clearTimeout(S.ct); S.ct = setTimeout(settingsChanged, 250); }));
   ['#pa', '#pb'].forEach((id) => $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); run(); } }));
   $('#go').onclick = run;
@@ -354,7 +380,13 @@ const ENSEMBLE_EXPLAIN = {
   },
   model: {
     title: 'The model',
-    body: `<p>Qwen3 14B with 4-bit (AWQ) weights, the same weights as the diversity demo, run on Modal's GPU. The prompts are continued as plain text, without a chat template, like the paper's GPT-2 example.</p>`,
+    body: `<p>Qwen3 14B with 4-bit (AWQ) weights, the same weights as the diversity demo, run on Modal's GPU. It is a chat model, but like any language model it gives a probability to every continuation of any text, so it can be used either way: see <b>Prompt format</b>.</p>`,
+  },
+  format: {
+    title: 'Prompt format',
+    body: `<p><b>Continue text</b>: the prompts are the beginning of a text (“My favorite physicist is”), and each completion continues it, as with GPT-2 in the paper's Fig. 1. Each completion is one sentence.</p>
+      <p><b>Chat</b>: the prompts are messages to the model (“Name a famous physicist.”) in its chat template, with reasoning switched off, and each completion is its reply, ending where the model ends its turn.</p>
+      <p>Same weights, two different distributions: a chat model continuing bare text often writes as if in a worksheet or a forum; asked in its template, it answers. In both, the scores are exact probabilities of the same reply under each prompt.</p>`,
   },
   N: { title: 'Samples N', body: `<p>How many completions are drawn. The ranking and every readout are computed from these N; more completions represent the ensemble better.</p>` },
   Tprime: { title: 'Sampling temperature T′', body: `<p>The temperature at which each token is drawn: $r(y_t \mid y_{<t}) \propto (p_A \cdot p_B)^{1/T'}$. At $T' = 1$ the draws follow the token-level product exactly.</p>` },
