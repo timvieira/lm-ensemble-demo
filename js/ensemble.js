@@ -32,7 +32,7 @@ const FORMAT_UI = {
   text: { a: 'Prompt A, e.g. My favorite physicist is', b: 'Prompt B, e.g. My favorite author is', c: 'e.g. My favorite physicist and author is',
     note: 'Each completion is one sentence.<button type="button" class="xbtn" data-x="stop" aria-label="When does a completion end?">?</button>' },
   chat: { a: 'Message A, e.g. Name a famous physicist.', b: 'Message B, e.g. Name a famous author.', c: 'e.g. Name a famous physicist who is also an author.',
-    note: 'Each reply ends where the model ends its turn.' },
+    note: 'Each reply ends where the model ends its turn.<button type="button" class="xbtn" data-x="specials" aria-label="When does a reply end?">?</button>' },
 };
 function fillExamples() {
   const ex = $('#examples'), f = pfmt();
@@ -400,10 +400,16 @@ const ENSEMBLE_EXPLAIN = {
         <li><b>No., pp., p., Art.</b>: not before a number (“No. 5”).</li>
         <li><b>Titles and initials</b> (Dr., Mr., Mrs., Prof., Gov., Sen., St., …; “J.”; e.g.; i.e.): never end a sentence, so “Dr. Richard Feynman.” is one completion.</li>
         <li><b>A new line</b> always ends a completion, with or without punctuation.</li>
+        <li><b>Any special token</b> of the model (end of text, a new chat turn, …) ends it too; see the chat format's note.</li>
       </ul>
       <p>Closing quotes and brackets count with the mark: “Whiskers.” ends. Otherwise a completion stops after <b>Max tokens</b>, marked “cut off”.</p>
       <p>Each ending is itself a choice with a probability: the total probability of all next tokens that would end the completion there. It is part of every score, so each score is still the exact probability of the completion ending there. One exception: a token that holds both text and a line break (such as “.” followed by a new line) ends the completion with that token's own probability, which leaves out other ways of writing the same text.</p>
       <p><b>Known gaps</b> (a heuristic, not a parser): “Vitamin C.” reads as an initial; abbreviations missing from the lists end like ordinary words; a space on its own as a token counts as “starts with a space” whatever follows.</p>` },
+  specials: {
+    title: 'Where a reply ends',
+    body: `<p>The model marks the end of its reply with a special token, <code>&lt;|im_end|&gt;</code>. A reply ends there, and also at any other special token: the end of a document, the start of a new turn (the model skipped the end mark), a reasoning tag or a tool call. None of these is text, so the reply shown is exactly what was scored.</p>
+      <p>Ending is part of the reply's probability: its score includes the probability that some special token comes next. Nothing is blocked or thrown away, which would change the model's distribution. Each reply records which special token ended it.</p>`,
+  },
   promptC: {
     title: 'The explicit prompt',
     body: `<p>A third prompt that asks for both at once, e.g. “My favorite physicist and author is”. It is not used to choose anything; it checks which ensemble behaves like asking directly. In the paper the global ensemble agrees with it closely ($\rho = 0.96$) and the local one does not ($\rho = 0.09$).</p>`,
