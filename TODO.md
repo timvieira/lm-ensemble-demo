@@ -3,12 +3,75 @@
 Moved from dpp-lm-demo's TODO.md on 2026-11-26 (dpp-lm-demo@5d42446), as it was. Paths in it are dpp-lm-demo's:
 lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ and scripts/ are still in dpp-lm-demo.
 
-## Left over from the move (26 Nov)
-- Hugging Face sign-in: the page asks Hugging Face to send the visitor back to its own address, so
-  https://timvieira.github.io/prompt-intersection/ must be a redirect URI of the OAuth app
-  (huggingface.co/settings/applications). Until then, signing in here fails.
-- Pools and presets are drawn in dpp-lm-demo (README, "The backend is still dpp-lm-demo's"). Decide whether the
-  GPU code moves here too.
+## Open after the move (26 Nov): nothing here is resolved yet
+
+### Needs Tim
+- **Hugging Face sign-in fails here until the OAuth app knows this address.** The page asks Hugging Face to send
+  the visitor back to its own address (js/hfauth.js: `location.origin + location.pathname`), so
+  https://timvieira.github.io/lm-ensemble-demo/ must be a redirect URI of the OAuth app (client 43d09d55-…,
+  huggingface.co/settings/applications). Live runs need sign-in, so they fail here too until then.
+- **The cloud session that built the prototype still points at dpp-lm-demo.** Point it at this repository. Its
+  commits to dpp-lm-demo's lab/ensemble* no longer reach any page (that address redirects here). One commit landed
+  there after the move (3af271a, empty completions labelled) and was ported here (72d3fb3). Before closing this item,
+  check dpp-lm-demo for later ensemble commits: `git log 3af271a.. -- lab/ensemble.html lab/ensemble.js lab/ensemble-math.js data/ensemble`.
+- **Where the GPU code lives.** Decided for now (Tim, 26 Nov): it stays in dpp-lm-demo's Modal app (`dpp-lm-sampler`:
+  modal/app.py, modal/ensemble_lib.py, scripts/ensemble_pool.py) with the pools workflow, which reads dpp-lm-demo's
+  data/ensemble/presets.json and commits pools there. So a preset change or new pools must be copied by hand between
+  dpp-lm-demo's data/ensemble/ and data/ here. Open: whether it moves here later.
+- **The unused copies in dpp-lm-demo.** Decided (Tim, 26 Nov): lab/ensemble*.js, data/ensemble/,
+  tests/ensemble.test.mjs and docs/handoff-ensemble-demo.md stay there. They will drift from the copies here.
+- **A permanent local clone** (e.g. ~/projects/lm-ensemble-demo)? Today's working copy was in a temporary folder.
+- **Maths typesetting.** The page typesets its explainers with KaTeX and writes symbols in labels, axes and cards as
+  Unicode (τ, Ẑ, log p(· | …)). Tim's global rule asks for MathJax (SVG) for every symbol in every page; the
+  handoff (B4, A8) says KaTeX. Does the rule apply to the demos?
+- **What "product" means at τ = 0.** The page's product is the weighted geometric mean √(p_A p_B) (weights ½; the
+  τ explainer says so), normalised. Whether the paper's Fig. 1 uses that or p_A·p_B has not been checked against
+  the paper. Rankings and ρ are the same either way; "ensemble %", log Ẑ and "Uses n of N" are not.
+
+### Found in the review of the page (26 Nov)
+- **The importance weights are concentrated on most continue-text pools**, so log Ẑ and every card's "ensemble %"
+  rest on a few draws. Effective sample size of 200 (proposal: the token-level product), computed from data/ on
+  26 Nov (dpp-lm-demo@5d42446 pools):
+
+  | pool | √(p_A p_B) (the page) | p_A·p_B |
+  |---|---|---|
+  | Qwen3 14B, text (5 pairs) | 1.6–7.1 | 2.5–24.2 |
+  | GPT-2, text (5 pairs) | 1.7–5.8 | 2.2–4.5 |
+  | Qwen3 14B, chat (5 pairs) | 1.0–200 | 1.0–194 |
+
+  Physicist × author (Qwen3, text), the page's default: ESS 1.6, and one draw ("Toni Morrison.") carries 79% of the
+  weight. Dessert × vegetable (chat): ESS 1.0 ("Cucumber" 99%). The page shows "Uses n of N", so this is disclosed,
+  but nothing says how uncertain the percentages are. Open: what to do (more draws, a better proposal, SMC as in
+  the paper, or showing the uncertainty).
+- **The chat pools are nearly deterministic: 1 to 6 distinct completions in 200.** Painter × inventor is
+  "Leonardo da Vinci" 200 times (hence ESS 200: equal weights, one string); physicist × author is 3 strings
+  (Albert Einstein ×157, Stephen Hawking ×41, J.K. Rowling ×2); dessert × vegetable is "Carrot cake" in three
+  spellings plus one more. The token-level product of two chat replies is very peaked at T′ = 1, so these pools
+  show little of either prompt's spread. Open: what the chat format should show (a higher T′ for the proposal?).
+- **"____." ranks 3rd for physicist × author** (Qwen3, text): a fill-in-the-blank completion. Relates to the open
+  preset-wording item below.
+- **Layout (seen at 1600 × 1000, before the full-screen layout):** the cards' score lines break inside a field
+  ("log p B" on one line, "−10.0" on the next) and their "?" floats; in the plot, the labels "Richard Feynman." and
+  "Stephen Hawking." crowd each other. Recheck after the layout change.
+
+### Untested after the move
+- Hugging Face sign-in end to end, and a live run (/ensemble_sample) from this address.
+- The page on a phone.
+- The redirect from dpp-lm-demo's lab/ensemble.html keeps the query string and fragment (checked: it lands here;
+  not checked: the URL it lands on).
+
+### Notes
+- The repository was created as timvieira/prompt-intersection and renamed lm-ensemble-demo the same day (Tim);
+  https://timvieira.github.io/prompt-intersection/ no longer exists, and nothing should link to it.
+- js/explain.js and js/hfauth.js are copies of dpp-lm-demo's (explain.js without the DPP explainers); fixes there do
+  not come here.
+- On Tim's laptop the `gh` token has no `workflow` scope, so pushes that touch .github/workflows go over SSH
+  (or after `gh auth refresh -s workflow`).
+
+### In progress (26 Nov)
+- The DPP demo's full-screen layout for this page: the plot fills the page, the controls and the ranked rail sit
+  beside it, readouts in a bar at the bottom (Tim).
+- When it has settled: send Robin Chan the link on Zulip (Tim).
 
 ## Prototype: the ensemble demo (prompt intersection, arXiv:2603.05432 Fig. 1)
 - Brief: docs/handoff-ensemble-demo.md. Built here as an unlinked lab page (lab/ensemble.html), to move

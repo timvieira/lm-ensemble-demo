@@ -1,9 +1,9 @@
-# Prompt intersection: demo
+# Ensembling language models: demo (prompt intersection)
 
 An interactive companion to
 [*Ensembling Language Models with Sequential Monte Carlo*](https://arxiv.org/abs/2603.05432)
 (Chan, Liu, Kiegeland, Pasti, Hoover Vigly, O'Donnell, Cotterell, Vieira), built on its Figure 1.
-A static page on GitHub Pages: https://timvieira.github.io/prompt-intersection/
+A static page on GitHub Pages: https://timvieira.github.io/lm-ensemble-demo/
 
 It started as a lab page of [dpp-lm-demo](https://github.com/timvieira/dpp-lm-demo) (`lab/ensemble.html`,
 now a redirect here) and moved on 2026-11-26 from dpp-lm-demo@5d42446, with the history of its files.

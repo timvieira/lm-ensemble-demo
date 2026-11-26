@@ -1,5 +1,5 @@
 {
-  "name": "prompt-intersection",
+  "name": "lm-ensemble-demo",
   "private": true,
   "type": "module",
   "scripts": {
