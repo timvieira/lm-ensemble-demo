@@ -28,11 +28,11 @@ the same weights with the same pool code.
   its `/ensemble_sample` route (`MODAL_URL` in `js/ensemble.js`). Paid from the demo's Modal budget; 20 runs per
   visitor a day, shared with the diversity demo. Its CORS list allows `https://timvieira.github.io` and
   `http://localhost:8765`.
-- **The Hugging Face Space** [xtimv/LM-ensemble-demo](https://huggingface.co/spaces/xtimv/LM-ensemble-demo), from
+- **The Hugging Face Space** [xtimv/lm-ensemble-demo](https://huggingface.co/spaces/xtimv/lm-ensemble-demo), from
   `space/` here: Gradio on ZeroGPU, called through Gradio's queue (`js/space.js`) with the visitor's token, so a run
   uses the visitor's own daily GPU quota. `space/ensemble_lib.py` is a copy of dpp-lm-demo's `modal/ensemble_lib.py`;
   keep the two the same. Deploy by uploading the folder (with a Hugging Face token that can write to the Space):
-  `hf upload xtimv/LM-ensemble-demo space . --repo-type space`. Check a running Space with
+  `hf upload xtimv/lm-ensemble-demo space . --repo-type space`. Check a running Space with
   `node scripts/space-check.mjs https://xtimv-lm-ensemble-demo.hf.space [model] [format] [n]`.
 
 The cached pools are drawn by dpp-lm-demo's "Ensemble prototype pools" workflow on Modal, which reads *that*

@@ -29,7 +29,7 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   modal/app.py, modal/ensemble_lib.py, scripts/ensemble_pool.py) with the pools workflow, which reads dpp-lm-demo's
   data/ensemble/presets.json and commits pools there. So a preset change or new pools must be copied by hand between
   dpp-lm-demo's data/ensemble/ and data/ here. Open: whether it moves here later.
-  26 Nov (Tim): a second backend lives here, a Hugging Face ZeroGPU Space (xtimv/LM-ensemble-demo, from space/), next
+  26 Nov (Tim): a second backend lives here, a Hugging Face ZeroGPU Space (xtimv/lm-ensemble-demo, from space/), next
   to Modal; the visitor picks it under "Runs on". space/ensemble_lib.py is a copy of dpp-lm-demo's
   modal/ensemble_lib.py (at 099e77e): two copies to keep the same.
 - **The unused copies in dpp-lm-demo.** Decided (Tim, 26 Nov): lab/ensemble*.js, data/ensemble/,
@@ -79,7 +79,12 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   dpp-lm-demo e54c873 (they need Hugging Face sign-in; see the first item).
 
 ### Open: the Hugging Face Space backend (26 Nov)
-- **Needs Tim: the deploy token.** .github/workflows/space.yml uploads space/ to xtimv/LM-ensemble-demo when space/
+- **Needs Tim: rename the Space to lm-ensemble-demo** (Tim, 26 Nov: "Call lm-ensemble-demo"). It was created as
+  xtimv/LM-ensemble-demo; Hugging Face already redirects the lowercase name to it, and its address
+  (xtimv-lm-ensemble-demo.hf.space, the page's SPACE_URL) is lowercase either way. The repository now uses
+  xtimv/lm-ensemble-demo everywhere; the deploy may need the rename first (not tested: whether the upload follows the
+  redirect).
+- **Needs Tim: the deploy token.** .github/workflows/space.yml uploads space/ to xtimv/lm-ensemble-demo when space/
   changes on main; it needs the repository secret HF_TOKEN, a Hugging Face token that can write to that Space
   (`gh secret set HF_TOKEN -R timvieira/lm-ensemble-demo`). Until then the workflow fails, saying so, and the Space has
   no app: choosing "Runs on: Hugging Face Space" says the Space is not answering. The laptop's HF_TOKEN (bashrc) is

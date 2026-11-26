@@ -1,6 +1,6 @@
 name: Deploy the Hugging Face Space
 
-# Uploads space/ to the Space xtimv/LM-ensemble-demo whenever space/ changes on main (or by hand, from the Actions tab).
+# Uploads space/ to the Space xtimv/lm-ensemble-demo whenever space/ changes on main (or by hand, from the Actions tab).
 # Needs the repository secret HF_TOKEN: a Hugging Face token that can write to that Space.
 # Files deleted from space/ are not deleted on the Space.
 on:
@@ -28,5 +28,5 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          test -n "$HF_TOKEN" || { echo "::error::The repository secret HF_TOKEN is not set: a Hugging Face token that can write to xtimv/LM-ensemble-demo."; exit 1; }
-          hf upload xtimv/LM-ensemble-demo space . --repo-type space --commit-message "Deploy from timvieira/lm-ensemble-demo@${GITHUB_SHA::8}"
+          test -n "$HF_TOKEN" || { echo "::error::The repository secret HF_TOKEN is not set: a Hugging Face token that can write to xtimv/lm-ensemble-demo."; exit 1; }
+          hf upload xtimv/lm-ensemble-demo space . --repo-type space --commit-message "Deploy from timvieira/lm-ensemble-demo@${GITHUB_SHA::8}"
