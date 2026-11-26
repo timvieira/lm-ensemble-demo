@@ -5,6 +5,7 @@ import * as d3 from 'd3';
 import { logGenMean, tauOf, uOf, tauName, NAMED, summarize, spearman } from './ensemble-math.js';
 import { EXPLAIN, initExplainers } from './explain.js';
 import { getAuth, signIn, signOut, finishSignIn } from './hfauth.js';
+import { callSpace } from './space.js';
 
 const DATA = 'data/';
 const $ = (s) => document.querySelector(s);
@@ -63,6 +64,11 @@ const MODELS = {
   gpt2: { label: 'GPT-2', formats: ['text'] },
 };
 const MODAL_URL = 'https://timvieira--dpp-lm-sampler-web.modal.run';
+// The second backend (space/app.py): a ZeroGPU Space, called with the visitor's sign-in, so runs use their own
+// Hugging Face GPU quota. Same weights and the same pool code (space/ensemble_lib.py) as Modal.
+const SPACE_URL = 'https://xtimv-lm-ensemble-demo.hf.space';
+const BACKENDS = { modal: { short: '', on: 'Modal', drawn: 'Modal' }, space: { short: ' · HF Space', on: 'the Hugging Face Space, on your GPU quota', drawn: 'the Hugging Face Space' } };
+const pbackend = () => $('#backend').value;
 const pmodel = () => $('#model').value;
 const pfmt = () => $('#fmt').value;   // the prompt format
 const FORMAT_UI = {
@@ -102,10 +108,12 @@ const DEFAULTS = { N: 200, Tprime: 1.0, maxNewTokens: 32 };
 function fill(p) { const q = p[pfmt()]; $('#pa').value = q.A; $('#pb').value = q.B; $('#pc').value = q.C ?? ''; syncGo(); }
 function readConfig() {
   return { model: pmodel(), fmt: pfmt(), A: $('#pa').value.trim(), B: $('#pb').value.trim(), C: $('#pc').value.trim(),
-    N: Math.round(+$('#n').value), Tprime: Math.round(10 * +$('#tp').value) / 10, maxNewTokens: Math.round(+$('#maxtok').value) };
+    N: Math.round(+$('#n').value), Tprime: Math.round(10 * +$('#tp').value) / 10, maxNewTokens: Math.round(+$('#maxtok').value),
+    backend: pbackend() };
 }
 function restore(c) {
   $('#model').value = c.model; syncModel(); $('#fmt').value = c.fmt; fillExamples();
+  if (BACKENDS[c.backend]) $('#backend').value = c.backend;
   $('#pa').value = c.A; $('#pb').value = c.B; $('#pc').value = c.C;
   $('#n').value = c.N; $('#tp').value = c.Tprime.toFixed(1); $('#maxtok').value = c.maxNewTokens;
   syncGo();
@@ -116,9 +124,9 @@ function cachedFor(c) {
   return p && same && (!c.C || c.C === p[c.fmt].C) ? p : null;
 }
 const poolKey = (p, c) => `${p.id}.${c.model}.${c.fmt}`;
-const runKey = (c) => JSON.stringify([c.model, c.fmt, c.A, c.B, c.C, c.N, c.Tprime, c.maxNewTokens]);
+const runKey = (c) => JSON.stringify([c.model, c.fmt, c.A, c.B, c.C, c.N, c.Tprime, c.maxNewTokens, c.backend]);
 const RUNS = new Map();   // this visit's live runs, by their settings
-function syncGo() { $('#go').disabled = !($('#pa').value.trim() && $('#pb').value.trim()); $('#adv-sum').textContent = `${MODELS[pmodel()].label} · ${$('#n').value} samples`; }
+function syncGo() { $('#go').disabled = !($('#pa').value.trim() && $('#pb').value.trim()); $('#adv-sum').textContent = `${MODELS[pmodel()].label} · ${$('#n').value} samples${BACKENDS[pbackend()].short}`; }
 async function settingsChanged() {
   syncGo();
   const c = readConfig(), p = cachedFor(c);
@@ -126,7 +134,7 @@ async function settingsChanged() {
     const k = poolKey(p, c);
     if (S.poolKey === k || await load(k)) { stageMsg(null); return; }
   }
-  if (RUNS.has(runKey(c))) { show(RUNS.get(runKey(c)), runKey(c), 'Your run'); stageMsg(null); return; }
+  if (RUNS.has(runKey(c))) { show(RUNS.get(runKey(c)), runKey(c), 'Your run', BACKENDS[c.backend].drawn); stageMsg(null); return; }
   if (S.pool) setStatus('The plot is from earlier prompts or settings. Press ↑.');
 }
 
@@ -140,7 +148,7 @@ async function run() {
   if (!c.A || !c.B || abort) return;
   const p = cachedFor(c);
   if (p && (S.poolKey === poolKey(p, c) || await load(poolKey(p, c)))) { stageMsg(null); return; }
-  if (RUNS.has(runKey(c))) { show(RUNS.get(runKey(c)), runKey(c), 'Your run'); stageMsg(null); return; }
+  if (RUNS.has(runKey(c))) { show(RUNS.get(runKey(c)), runKey(c), 'Your run', BACKENDS[c.backend].drawn); stageMsg(null); return; }
   const auth = getAuth();
   if (!auth) {
     stageMsg({ title: 'Running new prompts needs a free Hugging Face account.',
@@ -151,22 +159,32 @@ async function run() {
   abort = new AbortController();
   const t0 = performance.now(), secs = () => Math.round((performance.now() - t0) / 1000);
   const running = () => stageMsg({ running: true, title: `Sampling ${c.N} completions… ${secs()} s`,
-    detail: `${MODELS[c.model].label} on Modal.${secs() >= 60 ? ' The first run starts a GPU, which can take a minute or two.' : ''}`,
+    detail: `${MODELS[c.model].label} on ${BACKENDS[c.backend].on}.${secs() >= 60 ? (c.backend === 'space'
+      ? ' A Space that has been asleep wakes up and loads the model first, which can take a few minutes.'
+      : ' The first run starts a GPU, which can take a minute or two.') : ''}`,
     actions: '<button type="button" class="btn" data-act="stop">Stop</button>' });
   running();
   const tick = setInterval(running, 1000);
   $('#go').disabled = true;
   try {
-    const r = await fetch(`${MODAL_URL}/ensemble_sample`, {
-      method: 'POST', signal: abort.signal,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
-      body: JSON.stringify({ model: c.model, format: c.fmt, prompts: { A: c.A, B: c.B, ...(c.C ? { C: c.C } : {}) },
-        n: c.N, t_prime: c.Tprime, max_new_tokens: c.maxNewTokens }),
-    });
-    const out = await r.json().catch(() => null);
-    if (!r.ok || !out?.samples) throw Object.assign(new Error(out?.detail || ''), { code: out?.code || (r.ok ? 'bad_answer' : 'server') });
+    let out;
+    if (c.backend === 'space') {
+      // seed -1: the Space draws one, as Modal does when none is sent.
+      out = await callSpace(SPACE_URL, 'ensemble_sample', [c.model, c.fmt, c.A, c.B, c.C, c.N, c.Tprime, c.maxNewTokens, -1],
+        { signal: abort.signal, token: auth.token });
+      if (!out?.samples) throw Object.assign(new Error('The Space sent an answer the page could not read.'), { code: 'bad_answer' });
+    } else {
+      const r = await fetch(`${MODAL_URL}/ensemble_sample`, {
+        method: 'POST', signal: abort.signal,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
+        body: JSON.stringify({ model: c.model, format: c.fmt, prompts: { A: c.A, B: c.B, ...(c.C ? { C: c.C } : {}) },
+          n: c.N, t_prime: c.Tprime, max_new_tokens: c.maxNewTokens }),
+      });
+      out = await r.json().catch(() => null);
+      if (!r.ok || !out?.samples) throw Object.assign(new Error(out?.detail || ''), { code: out?.code || (r.ok ? 'bad_answer' : 'server') });
+    }
     RUNS.set(runKey(c), out);
-    if (runKey(readConfig()) === runKey(c)) { stageMsg(null); show(out, runKey(c), `Sampled in ${secs()} s`); }
+    if (runKey(readConfig()) === runKey(c)) { stageMsg(null); show(out, runKey(c), `Sampled in ${secs()} s`, BACKENDS[c.backend].drawn); }
     else { stageMsg(null); setStatus('Done, but for earlier settings. Set them back to see it.'); }
   } catch (e) {
     if (e.name === 'AbortError') { stageMsg(null); setStatus('Stopped.'); }
@@ -176,13 +194,19 @@ async function run() {
   }
 }
 function failed(e) {
-  const code = e.code || 'unreachable';
+  const code = e.code || 'unreachable', space = pbackend() === 'space';
+  const retryBtn = '<button type="button" class="btn" data-act="retry">Try again</button>';
+  const useModalBtn = space ? ' <button type="button" class="btn" data-act="use-modal">Run on Modal</button>' : '';
   const why = {
     auth: ['Your Hugging Face sign-in has expired.', 'Sign in again to run.', signInBtn()],
     rate_limit: ['You have used today’s runs.', esc(e.message) || 'Please come back tomorrow.', ''],
     budget: ['This month’s GPU budget for the demo is used up.', 'The example pairs still work.', '<button type="button" class="btn" data-act="example">Use an example</button>'],
     bad_request: ['The server could not run these settings.', esc(e.message), ''],
-    unreachable: ['The GPU on Modal could not be reached.', 'Check your connection and try again.', '<button type="button" class="btn" data-act="retry">Try again</button>'],
+    unreachable: [`The ${space ? 'Hugging Face Space' : 'GPU on Modal'} could not be reached.`, 'Check your connection and try again.', retryBtn + useModalBtn],
+    // The Hugging Face Space only:
+    quota: ['Your daily Hugging Face GPU time is used up.', esc(e.message) || 'Free accounts get a few minutes a day.', useModalBtn],
+    starting: ['The Hugging Face Space is not answering yet.', 'It may be waking up or restarting. Try again in a minute, or run on Modal.', retryBtn + useModalBtn],
+    busy: ['The Hugging Face Space is busy.', esc(e.message) || 'Try again in a minute, or run on Modal.', retryBtn + useModalBtn],
   }[code] ?? ['Something went wrong on the server.', esc(e.message), '<button type="button" class="btn" data-act="retry">Try again</button>'];
   if (code === 'auth') signOut();
   stageMsg({ title: why[0], detail: why[1], actions: why[2] });
@@ -198,6 +222,7 @@ function stageMsg(m) {
     if (a === 'dismiss') stageMsg(null);
     if (a === 'stop') abort?.abort();
     if (a === 'retry') { stageMsg(null); run(); }
+    if (a === 'use-modal') { $('#backend').value = 'modal'; syncGo(); stageMsg(null); run(); }
     if (a === 'signin') signIn({ cfg: readConfig() }).catch(() => stageMsg({ title: 'The Hugging Face sign-in could not be loaded.', detail: 'Check your connection and try again.', actions: signInBtn() }));
     if (a === 'example') { stageMsg(null); setTimeout(() => { $('#exmenu').open = true; }); }   // after this click's close-menus pass
   }));
@@ -209,12 +234,12 @@ async function load(key) {
   const r = await fetch(DATA + key + '.json').catch(() => null);
   if (r && r.status === 404) return false;
   if (!r || !r.ok) { stageMsg({ title: 'These completions could not be loaded.', detail: 'Check your connection and reload the page.', actions: '' }); return true; }
-  show(await r.json(), key, 'Cached');
+  show(await r.json(), key, 'Cached', 'Modal');   // the example pairs' pools are drawn by the pools workflow on Modal
   return true;
 }
-function show(pool, key, how) {
+function show(pool, key, how, where) {
   S.pool = pool; S.poolKey = key;
-  setStatus(`${how}: ${pool.N} completions from ${pool.model.split('/').pop()}${pool.standIn ? ' (stand-in, on a CPU)' : ', drawn on Modal'}.`);
+  setStatus(`${how}: ${pool.N} completions from ${pool.model.split('/').pop()}${pool.standIn ? ' (stand-in, on a CPU)' : `, drawn on ${where}`}.`);
   // One group per distinct string; copies share every score.
   const byText = new Map();
   pool.samples.forEach((s, i) => { const g = byText.get(s.text); if (g) g.idx.push(i); else byText.set(s.text, { i, idx: [i] }); });
@@ -510,6 +535,7 @@ function wire() {
   };
   $('#fmt').onchange = setFormat;
   $('#model').onchange = () => { syncModel(); settingsChanged(); };
+  $('#backend').onchange = () => settingsChanged();
   ['#pa', '#pb', '#pc', '#n', '#tp', '#maxtok'].forEach((id) => $(id).addEventListener('input', () => { clearTimeout(S.ct); S.ct = setTimeout(settingsChanged, 250); }));
   ['#pa', '#pb'].forEach((id) => $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); run(); } }));
   $('#go').onclick = run;
@@ -559,7 +585,13 @@ const ENSEMBLE_EXPLAIN = {
     title: 'The model',
     body: `<p><b>Qwen3 14B</b> with 4-bit (AWQ) weights, the same weights as the diversity demo. It is a chat model, but like any language model it gives a probability to every continuation of any text, so it can be used either way: see <b>Prompt format</b>.</p>
       <p><b>GPT-2</b> (124M parameters), the model of the paper's Fig. 1. It only continues text: it has no chat template.</p>
-      <p>Both run on the demo's GPUs on Modal. Running new prompts needs a free Hugging Face account; the example pairs are cached and need nothing.</p>`,
+      <p>Both run on the demo's GPU on Modal or on a Hugging Face Space: see <b>Runs on</b>. Running new prompts needs a free Hugging Face account; the example pairs are cached and need nothing.</p>`,
+  },
+  backend: {
+    title: 'Where runs happen',
+    body: `<p><b>Modal</b>: the demo's own GPU (an L40S), paid from the demo's monthly budget; each visitor gets 20 runs a day, shared with the diversity demo.</p>
+      <p><b>Hugging Face Space</b>: a ZeroGPU Space. Each run uses <i>your</i> Hugging Face account's daily GPU quota. A Space that has had no visitors for a while sleeps, so a first run can take a few minutes while it wakes up and loads the model.</p>
+      <p>Both run the same model weights with the same code. Either way, running new prompts needs a free Hugging Face sign-in; the example pairs are cached and need nothing.</p>`,
   },
   format: {
     title: 'Prompt format',

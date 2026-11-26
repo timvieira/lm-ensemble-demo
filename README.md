@@ -19,16 +19,25 @@ The brief, and how the sibling demo has been steered: `docs/handoff-ensemble-dem
 | `data/` (`presets.json` and the cached pools) | `data/ensemble/` |
 | `js/explain.js` ("?" explainers), `js/hfauth.js` (Hugging Face sign-in) | `js/`, copied at 5d42446; `explain.js` without the DPP demo's explainers |
 
-## The backend is still dpp-lm-demo's
+## Backends: Modal (in dpp-lm-demo) and a Hugging Face Space (here)
 
-The GPU code stays in dpp-lm-demo's Modal app (`dpp-lm-sampler`, `modal/app.py` and `modal/ensemble_lib.py`
-there):
+The settings' "Runs on" picks where a live run happens. Both need the visitor's Hugging Face sign-in, and both run
+the same weights with the same pool code.
 
-- Live runs call its `/ensemble_sample` route (`MODAL_URL` in `js/ensemble.js`). Its CORS list allows
-  `https://timvieira.github.io` and `http://localhost:8765`.
-- The cached pools are drawn by dpp-lm-demo's "Ensemble prototype pools" workflow, which reads *that* repository's
-  `data/ensemble/presets.json` and commits the pools there. Until the GPU code moves here, a change to the presets
-  or a new set of pools has to be copied between the two repositories by hand (`data/ensemble/` there is `data/` here).
+- **Modal**, dpp-lm-demo's app (`dpp-lm-sampler`, `modal/app.py` and `modal/ensemble_lib.py` there): the page calls
+  its `/ensemble_sample` route (`MODAL_URL` in `js/ensemble.js`). Paid from the demo's Modal budget; 20 runs per
+  visitor a day, shared with the diversity demo. Its CORS list allows `https://timvieira.github.io` and
+  `http://localhost:8765`.
+- **The Hugging Face Space** [xtimv/LM-ensemble-demo](https://huggingface.co/spaces/xtimv/LM-ensemble-demo), from
+  `space/` here: Gradio on ZeroGPU, called through Gradio's queue (`js/space.js`) with the visitor's token, so a run
+  uses the visitor's own daily GPU quota. `space/ensemble_lib.py` is a copy of dpp-lm-demo's `modal/ensemble_lib.py`;
+  keep the two the same. Deploy by uploading the folder (with a Hugging Face token that can write to the Space):
+  `hf upload xtimv/LM-ensemble-demo space . --repo-type space`. Check a running Space with
+  `node scripts/space-check.mjs https://xtimv-lm-ensemble-demo.hf.space [model] [format] [n]`.
+
+The cached pools are drawn by dpp-lm-demo's "Ensemble prototype pools" workflow on Modal, which reads *that*
+repository's `data/ensemble/presets.json` and commits the pools there; a change to the presets or a new set of pools
+has to be copied between the two repositories by hand (`data/ensemble/` there is `data/` here).
 
 ## Develop
 

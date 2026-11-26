@@ -29,6 +29,9 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   modal/app.py, modal/ensemble_lib.py, scripts/ensemble_pool.py) with the pools workflow, which reads dpp-lm-demo's
   data/ensemble/presets.json and commits pools there. So a preset change or new pools must be copied by hand between
   dpp-lm-demo's data/ensemble/ and data/ here. Open: whether it moves here later.
+  26 Nov (Tim): a second backend lives here, a Hugging Face ZeroGPU Space (xtimv/LM-ensemble-demo, from space/), next
+  to Modal; the visitor picks it under "Runs on". space/ensemble_lib.py is a copy of dpp-lm-demo's
+  modal/ensemble_lib.py (at 099e77e): two copies to keep the same.
 - **The unused copies in dpp-lm-demo.** Decided (Tim, 26 Nov): lab/ensemble*.js, data/ensemble/,
   tests/ensemble.test.mjs and docs/handoff-ensemble-demo.md stay there. They will drift from the copies here.
 - **Maths typesetting.** The page typesets its explainers with KaTeX and writes symbols in labels, axes and cards as
@@ -74,6 +77,18 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   crowding item above.
 - **The banner is stale:** "only the example pairs have completions so far", but live runs exist since
   dpp-lm-demo e54c873 (they need Hugging Face sign-in; see the first item).
+
+### Open: the Hugging Face Space backend (26 Nov)
+- **Needs Tim: the deploy token.** .github/workflows/space.yml uploads space/ to xtimv/LM-ensemble-demo when space/
+  changes on main; it needs the repository secret HF_TOKEN, a Hugging Face token that can write to that Space
+  (`gh secret set HF_TOKEN -R timvieira/lm-ensemble-demo`). Until then the workflow fails, saying so, and the Space has
+  no app: choosing "Runs on: Hugging Face Space" says the Space is not answering. The laptop's HF_TOKEN (bashrc) is
+  read-only.
+- **Untested on ZeroGPU:** loading Qwen3 14B (unpacked AWQ) there, the GPU time reserved per run (space/app.py,
+  _duration: a guess, not measured), and the quota message (ZeroGPU's own error text, matched by "quota"). Tested on
+  the laptop's CPU with GPT-2 and Qwen3 0.6B: pools through the page's own client (scripts/space-check.mjs), sampling
+  sums match teacher-forced scores to about 1e-4 nats, every bad request refused with a code, and the page end to end
+  (a run, its status line, and the message when the Space cannot be reached).
 
 ### Untested after the move
 - Hugging Face sign-in end to end, and a live run (/ensemble_sample) from this address.
@@ -121,6 +136,10 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   480 px the composer's menus open from its left edge. Checked at dpp-lm-demo's overflow-test widths (320, 360, 390,
   430, 600, 700, 768, 900, 1024, 1280, 1440) and 1100: every menu on screen, nothing cut, no sideways scroll. This repo
   still has no overflow test of its own.
+- **A second backend, a Hugging Face ZeroGPU Space** (Tim): space/ (app.py, a copy of dpp-lm-demo's ensemble_lib.py,
+  README.md as the Space card), deployed by .github/workflows/space.yml; js/space.js calls it through Gradio's queue with
+  the visitor's token; "Runs on" in the settings picks Modal or the Space; the Space's errors (quota, not answering,
+  busy) have their own messages, with "Run on Modal". The status line says where a pool was drawn.
 - **Card meta lines** break between fields, never inside one ("log p_A −1.1" stays together).
 - **The explainers' maths was broken in 9 of 16** (since they were written in dpp-lm-demo ad96dde): the TeX sat in
   JS template literals with single backslashes, so \varphi, \tau, \rho, \frac became control characters and

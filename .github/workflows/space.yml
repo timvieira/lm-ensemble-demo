@@ -1,0 +1,32 @@
+name: Deploy the Hugging Face Space
+
+# Uploads space/ to the Space xtimv/LM-ensemble-demo whenever space/ changes on main (or by hand, from the Actions tab).
+# Needs the repository secret HF_TOKEN: a Hugging Face token that can write to that Space.
+# Files deleted from space/ are not deleted on the Space.
+on:
+  push:
+    branches: [main]
+    paths: ['space/**', '.github/workflows/space.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: space
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: The Space's code compiles
+        run: python -m py_compile space/app.py space/ensemble_lib.py
+      - run: pip install "huggingface_hub>=1.0"
+      - name: Upload space/ to the Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          test -n "$HF_TOKEN" || { echo "::error::The repository secret HF_TOKEN is not set: a Hugging Face token that can write to xtimv/LM-ensemble-demo."; exit 1; }
+          hf upload xtimv/LM-ensemble-demo space . --repo-type space --commit-message "Deploy from timvieira/lm-ensemble-demo@${GITHUB_SHA::8}"
