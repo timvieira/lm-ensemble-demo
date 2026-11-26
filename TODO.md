@@ -84,11 +84,9 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   (xtimv-lm-ensemble-demo.hf.space, the page's SPACE_URL) is lowercase either way. The repository now uses
   xtimv/lm-ensemble-demo everywhere; the deploy may need the rename first (not tested: whether the upload follows the
   redirect).
-- **Needs Tim: the deploy token.** .github/workflows/space.yml uploads space/ to xtimv/lm-ensemble-demo when space/
-  changes on main; it needs the repository secret HF_TOKEN, a Hugging Face token that can write to that Space
-  (`gh secret set HF_TOKEN -R timvieira/lm-ensemble-demo`). Until then the workflow fails, saying so, and the Space has
-  no app: choosing "Runs on: Hugging Face Space" says the Space is not answering. The laptop's HF_TOKEN (bashrc) is
-  read-only.
+- **Done: the deploy token** (26 Nov). The repository secret HF_TOKEN is set (Tim); the first deploy uploaded space/ to
+  the Space (its commit b7bb356). The upload followed Hugging Face's redirect from xtimv/lm-ensemble-demo, so it works
+  before the rename too.
 - **Untested on ZeroGPU:** loading Qwen3 14B (unpacked AWQ) there, the GPU time reserved per run (space/app.py,
   _duration: a guess, not measured), and the quota message (ZeroGPU's own error text, matched by "quota"). Tested on
   the laptop's CPU with GPT-2 and Qwen3 0.6B: pools through the page's own client (scripts/space-check.mjs), sampling
