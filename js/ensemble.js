@@ -1,7 +1,7 @@
 // Prompt intersection: a prototype for "Ensembling Language Models with SMC" (arXiv:2603.05432, Fig. 1).
 // Brief: docs/handoff-ensemble-demo.md. Pools: data/ensemble/<preset>.json (modal/ensemble_lib.py).
 import * as d3 from 'd3';
-import { logGenMean, tauOf, uOf, tauName, NAMED, summarize, sampleWOR, spearman, mulberry32, logsumexp } from './ensemble-math.js';
+import { logGenMean, tauOf, uOf, tauName, NAMED, summarize, spearman } from './ensemble-math.js';
 import { EXPLAIN, initExplainers } from '../js/explain.js';
 
 const DATA = '../data/ensemble/';
@@ -88,7 +88,7 @@ async function load(id) {
   const byText = new Map();
   pool.samples.forEach((s, i) => { const g = byText.get(s.text); if (g) g.idx.push(i); else byText.set(s.text, { i, idx: [i] }); });
   S.groups = [...byText.values()];
-  S.open = new Set(); S.draw = 1;
+  S.open = new Set(); S.showAll = false;
   plot.reset();
   update();
 }
@@ -106,24 +106,21 @@ function update() {
   const logv = P.samples.map((s, i) => score[i] - s.logr);    // importance weights: target / proposal
   const sum = summarize(logv);
   const gScore = S.groups.map((g) => score[g.i]);
-  const gLogv = S.groups.map((g) => logsumexp(g.idx.map((i) => logv[i])));
-  const gShare = S.groups.map((g) => g.idx.reduce((a, i) => a + sum.share[i], 0));
-  const K = Math.min(S.K, S.groups.length);
-  let sel;
-  if (S.mode === 'map') sel = d3.range(S.groups.length).sort((a, b) => gScore[b] - gScore[a]).slice(0, K);
-  else sel = sampleWOR(gLogv, K, mulberry32(1000 * S.draw + 7));
-  sel.sort((a, b) => gScore[b] - gScore[a]);   // shown by their score under the ensemble, in both modes
-  S.sel = sel.map((g) => S.groups[g].i);
-  Object.assign(S, { scoreArr: score, gShare, sum, selGroups: sel });
+  // Every distinct completion, ranked by its score under the ensemble. Its probability under the ensemble is
+  // φ(y)/Z, with Z estimated from the pool by importance weighting (Ẑ = mean of φ/r); the rank is exact.
+  const rank = d3.range(S.groups.length).sort((a, b) => gScore[b] - gScore[a]);
+  const gProb = gScore.map((v) => Math.exp(v - sum.logZ));
+  S.sel = rank.slice(0, LABELLED).map((g) => S.groups[g].i);   // the best five: red, and labelled in the plot
+  Object.assign(S, { scoreArr: score, sum, rank, gProb });
   readouts(score);
-  cards(sel, gShare);
+  cards(rank, gProb);
   plot.draw();
   valid.draw(score);
 }
 
 function readouts(score) {
   const P = S.pool, N = P.N, distinct = S.groups.length;
-  $('#sel-sub').textContent = `K = ${S.sel.length} · ${S.mode === 'map' ? 'most likely' : 'sampled'} · ${N} completions, ${distinct} distinct`;
+  $('#sel-sub').textContent = `${N} completions, ${distinct} distinct · ${S.score === 'local' ? 'local scores' : 'scored at ' + (tauName(tau()) ?? 'τ = ' + fmt(tau(), 2))}`;
   const rows = [
     [`Uses${xb('ess')}`, `${fmt(S.sum.ess, 1)} of ${N} completions`],
     [`log Ẑ${xb('logZ')}`, fmt(S.sum.logZ, 2)],
@@ -131,14 +128,20 @@ function readouts(score) {
   $('#readout').innerHTML = rows.map(([k, v]) => `<span>${k}</span><span class="v">${v}</span>`).join('');
 }
 
-function cards(sel, gShare) {
-  const P = S.pool;
-  $('#cards').innerHTML = sel.map((g) => {
+const SHOWN = 10, LABELLED = 5;   // display only: the list shows ten until "Show all"; the plot labels five
+const pctOf = (p) => (p >= 0.001 ? `${fmt(100 * p, p >= 0.1 ? 0 : 1)}%` : '< 0.1%');
+function cards(rank, gProb) {
+  const P = S.pool, top = new Set(S.sel), list = S.showAll ? rank : rank.slice(0, SHOWN);
+  $('#cards').innerHTML = list.map((g, r) => {
     const G = S.groups[g], s = P.samples[G.i];
     return `<li class="card${S.open.has(G.i) ? ' open' : ''}" data-i="${G.i}">
       <div class="txt">${esc(s.text.trim())}${s.ended ? '' : ' …'}</div>
-      <div class="meta"><span class="dot"></span>${G.idx.length > 1 ? `×${G.idx.length} · ` : ''}log p<sub>A</sub> ${fmt(s.logpA)} · log p<sub>B</sub> ${fmt(s.logpB)} · share ${fmt(100 * gShare[g], 1)}%${xb('share')}${s.ended ? '' : `<span class="cutoff">cut off at ${s.nTokens} tokens</span>`}</div></li>`;
+      <div class="meta"><span class="rank">${r + 1}.</span>${top.has(G.i) ? '<span class="dot"></span>' : ''}${G.idx.length > 1 ? `×${G.idx.length} · ` : ''}log p<sub>A</sub> ${fmt(s.logpA)} · log p<sub>B</sub> ${fmt(s.logpB)} · ensemble ${pctOf(gProb[g])}${xb('prob')}${s.ended ? '' : `<span class="cutoff">cut off at ${s.nTokens} tokens</span>`}</div></li>`;
   }).join('');
+  const more = $('#more');
+  more.hidden = rank.length <= SHOWN;
+  more.textContent = S.showAll ? `Show the top ${SHOWN}` : `Show all ${rank.length}`;
+  more.onclick = () => { S.showAll = !S.showAll; cards(S.rank, S.gProb); };
   $('#cards').querySelectorAll('.card').forEach((el) => {
     const i = +el.dataset.i;
     el.onmouseenter = () => plot.highlight(i);
@@ -217,7 +220,6 @@ const plot = {
     }
     const sc = S.scoreArr, lo = d3.min(sc), hi = d3.max(sc);
     const levels = d3.range(1, 9).map((k) => lo + (k / 9) * (hi - lo));
-    const kth = S.mode === 'map' && S.sel.length ? Math.min(...S.sel.map((i) => sc[i])) : null;
     const proj = d3.geoTransform({ point(px, py) {
       this.stream.point(plot.x.range()[0] + (px / n) * (plot.x.range()[1] - plot.x.range()[0]), plot.y.range()[1] + (py / n) * (plot.y.range()[0] - plot.y.range()[1]));
     } });
@@ -227,7 +229,6 @@ const plot = {
       .attr('stroke-opacity', strong ? 0.6 : 0.22).attr('stroke-width', strong ? 1.2 : 1)
       .attr('stroke-dasharray', strong ? '5 3' : null);
     levels.forEach((lv) => draw(lv, false));
-    if (kth != null) draw(kth - 1e-9, true);   // Most likely: everything past this line is selected
   },
   labels(sel) {
     const items = S.sel.map((i) => ({ i, x: this.pos[i][0], y: this.pos[i][1] })).sort((a, b) => a.y - b.y);
@@ -312,15 +313,6 @@ function wire() {
   ['#pa', '#pb'].forEach((id) => $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); run(); } }));
   $('#go').onclick = run;
   document.addEventListener('click', (e) => { for (const id of ['#exmenu', '#adv', '#viewmenu']) { const m = $(id); if (m.open && !e.composedPath().includes(m) && !e.target.closest('.xpop')) m.open = false; } });
-  const setK = (k) => { S.K = Math.max(1, Math.min(20, k)); $('#k').textContent = S.K; update(); };
-  $('#k-minus').onclick = () => setK(S.K - 1);
-  $('#k-plus').onclick = () => setK(S.K + 1);
-  document.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => {
-    if (b.dataset.mode === 'sample' && S.mode === 'sample') S.draw++;   // Sample again: a new draw
-    S.mode = b.dataset.mode;
-    document.querySelectorAll('[data-mode]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
-    update();
-  }));
   document.querySelectorAll('[data-score]').forEach((b) => (b.onclick = () => {
     S.score = b.dataset.score;
     document.querySelectorAll('[data-score]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
@@ -350,13 +342,6 @@ const ENSEMBLE_EXPLAIN = {
       </ul>
       <p>Each value of $\tau$ is the distribution closest to both prompts under one α-divergence ($\alpha = 1 - \tau$). The grey lines in the plot are where $\varphi_\tau$ is constant.</p>`,
   },
-  choose: {
-    title: 'How the K completions are chosen',
-    body: `<p><b>Most likely</b> takes the K distinct completions with the highest score. In the plot, they are the ones beyond the red dashed line.</p>
-      <p><b>Sample</b> draws K at random, each with probability proportional to its importance weight
-      $$w(y) = \frac{\varphi_\tau(y)}{r(y)},$$
-      the score divided by the probability $r(y)$ with which the completion was drawn. That undoes how the completions were drawn, so the draw approximates the ensemble over all strings. Press Sample again for another draw.</p>`,
-  },
   scored: {
     title: 'Global or local scores',
     body: `<p><b>Global</b> scores each whole string: $\varphi_\tau(y)$ from the two prompts' probabilities of the complete completion. This is the ensemble the paper targets.</p>
@@ -364,14 +349,14 @@ const ENSEMBLE_EXPLAIN = {
   },
   proposal: {
     title: 'Where the completions come from',
-    body: `<p>The completions are drawn from the token-level product of A and B: each next token is picked with probability proportional to $p_A \cdot p_B$ (at temperature $T'$). The probability of drawing a completion, $r(y)$, is recorded, so <b>Sample</b> can correct for it.</p>
+    body: `<p>The completions are drawn from the token-level product of A and B: each next token is picked with probability proportional to $p_A \cdot p_B$ (at temperature $T'$). The probability of drawing a completion, $r(y)$, is recorded, so the ensemble's probabilities can be estimated from the pool (see <b>ensemble %</b> on the cards).</p>
       <p>The paper's Fig. 1 used beam search; drawing at random is needed here because the corrections need $r(y)$. Other choices (A alone, B alone, a mixture) are planned.</p>`,
   },
   model: {
     title: 'The model',
     body: `<p>Qwen3 14B with 4-bit (AWQ) weights, the same weights as the diversity demo, run on Modal's GPU. The prompts are continued as plain text, without a chat template, like the paper's GPT-2 example.</p>`,
   },
-  N: { title: 'Samples N', body: `<p>How many completions are drawn. Every score, selection and readout is computed from these N; more completions represent the ensemble better.</p>` },
+  N: { title: 'Samples N', body: `<p>How many completions are drawn. The ranking and every readout are computed from these N; more completions represent the ensemble better.</p>` },
   Tprime: { title: 'Sampling temperature T′', body: `<p>The temperature at which each token is drawn: $r(y_t \mid y_{<t}) \propto (p_A \cdot p_B)^{1/T'}$. At $T' = 1$ the draws follow the token-level product exactly.</p>` },
   maxtok: { title: 'Max tokens', body: `<p>A completion stops at the end of its first sentence, or after this many tokens. One that hits the limit is marked “cut off”.</p>` },
   stop: { title: 'One sentence', body: `<p>As in the paper, every completion is a short answer ending in a period. A period ends it only when it ends a sentence: the next token starts with a space or ends the text, and the period is not part of an abbreviation (“Dr.”, “e.g.”) or an initial (“J. Robert Oppenheimer”). So “Dr. Richard Feynman.” is one completion, and “0.5” is not cut at “0.”.</p>
@@ -388,15 +373,15 @@ const ENSEMBLE_EXPLAIN = {
     title: 'Uses n of N completions',
     body: `<p>The effective sample size of the importance weights,
       $$\mathrm{ESS} = \frac{(\sum_i w_i)^2}{\sum_i w_i^2},$$
-      between 1 and N. It says how many completions <b>Sample</b> really rests on: when a few weights dominate, the estimate is only as good as those few.</p>`,
+      between 1 and N. It says how many completions the estimate of $Z$ (and so every “ensemble %”) really rests on: when a few weights dominate, it is only as good as those few. The ranking itself does not depend on it.</p>`,
   },
   logZ: {
     title: 'log Ẑ',
     body: `<p>The estimated normaliser of the ensemble, $\hat Z = \frac1N\sum_i w_i$: an unbiased estimate of $Z = \sum_y \varphi_\tau(y)$ over all strings. Small means the two prompts share little probability.</p>`,
   },
-  share: {
-    title: 'Share',
-    body: `<p>The completion's share of the estimated ensemble, $w(y) / \sum_i w_i$ (summed over copies of the same text): how much of the ensemble's probability, among these N completions, falls on it.</p>`,
+  prob: {
+    title: 'Probability under the ensemble',
+    body: `<p>The completion's probability under the ensemble, $\Phi(y) = \varphi_\tau(y)/Z$. The score $\varphi_\tau(y)$ is exact; the normaliser $Z$, a sum over all strings, is estimated from the N completions ($\hat Z$, see log Ẑ). The list is ranked by $\varphi_\tau$, so the ranking is exact even when $\hat Z$ is rough.</p>`,
   },
 };
 

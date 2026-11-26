@@ -151,6 +151,8 @@
   .card .txt { white-space: pre-wrap; overflow-wrap: anywhere; font: 17px/1.4 var(--serif); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden; }
   .card.open .txt { display: block; overflow: visible; }
   .card .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; color: var(--muted); font: 11.5px var(--sans); }
+  .card .rank { font: 600 11.5px var(--sans); color: var(--text-2); min-width: 1.6em; }
+  .btn.more { margin-top: 10px; width: 100%; }
   .card .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex: none; }
   .cutoff { color: var(--text-2); font-style: italic; flex-basis: 100%; }
   #valid { width: 100%; height: 180px; display: block; margin-top: 4px; }
@@ -205,11 +207,6 @@
         <span class="ends" aria-hidden="true"><span>agreement</span><span>coverage</span></span>
         <output id="tau-out"></output>
       </div>
-      <div class="row">
-        <span class="ctl"><span class="lab">K</span><span class="stepper"><button id="k-minus" aria-label="Fewer">−</button><output id="k">5</output><button id="k-plus" aria-label="More">+</button></span></span>
-        <span class="grow"></span>
-        <span class="pick" role="group" aria-label="How to choose"><button data-mode="map" aria-pressed="true">Most likely</button><button data-mode="sample" aria-pressed="false">Sample</button></span><button type="button" class="xbtn" data-x="choose" aria-label="How are the K chosen?">?</button>
-      </div>
     </section>
   </div>
   <section class="stage">
@@ -221,19 +218,20 @@
     </details>
   </section>
   <aside class="rail">
-    <h2>Selected</h2>
+    <h2>Ranked by the ensemble</h2>
     <p class="sub" id="sel-sub"></p>
     <div class="readout" id="readout"></div>
     <ol class="cards" id="cards"></ol>
+    <button type="button" class="btn more" id="more" hidden></button>
     <h2 style="margin-top:18px">Against the “A and B” prompt<button type="button" class="xbtn" data-x="valid" aria-label="What does this check?">?</button></h2>
     <p class="sub" id="valid-sub"></p>
     <svg id="valid" aria-label="Each completion's score against its log p under the explicit prompt"></svg>
     <details class="about">
       <summary>What this shows</summary>
       <p>Each dot is a completion, placed by how likely it is after prompt A (across) and after prompt B (up). The completions were drawn from the <i>token-level</i> product of the two prompts: at every step, the next token is picked in proportion to p<sub>A</sub>·p<sub>B</sub>.</p>
-      <p><b>τ</b> chooses how the two probabilities are combined over the <i>whole string</i>: the generalised mean (Σ ½ p<sub>k</sub><sup>τ</sup>)<sup>1/τ</sup>. At the left end, the minimum: a completion is only as good as its worse prompt says (agreement). In the middle, the product. Then the sum, a mixture, and at the right end the maximum: either prompt liking it is enough (coverage). The grey lines are where that combined score is constant; the red points are the K chosen.</p>
+      <p><b>τ</b> chooses how the two probabilities are combined over the <i>whole string</i>: the generalised mean (Σ ½ p<sub>k</sub><sup>τ</sup>)<sup>1/τ</sup>. At the left end, the minimum: a completion is only as good as its worse prompt says (agreement). In the middle, the product. Then the sum, a mixture, and at the right end the maximum: either prompt liking it is enough (coverage). The grey lines are where that combined score is constant; the list on the right ranks the completions by it, and the red points are the best five.</p>
       <p><b>Scored: local</b> uses the token-level product's own string probability instead, the usual way of ensembling. It favours openings both prompts like one token at a time, rather than completions both like as a whole (the paper's Fig. 1).</p>
-      <p><b>Sample</b> draws K completions with importance weights: the combined score divided by the probability of drawing the completion. "Uses n of N" is the effective sample size of those weights: how many completions the estimate really rests on.</p>
+      <p>Each completion's probability under the ensemble is its score divided by the ensemble's normaliser, estimated from the N completions with importance weights (the score divided by the probability of drawing the completion). "Uses n of N" is the effective sample size of those weights: how many completions that estimate really rests on.</p>
     </details>
   </aside>
 </div>

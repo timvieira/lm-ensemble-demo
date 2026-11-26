@@ -54,14 +54,6 @@ export function summarize(logv) {
   return { logZ: ls - Math.log(N), ess, share: logv.map((x) => Math.exp(x - ls)) };
 }
 
-// K distinct items drawn without replacement with probability ∝ weight at each draw (successive
-// sampling), from log weights; Efraimidis–Spirakis keys: the K smallest log(−log u) − log w.
-export function sampleWOR(logw, K, rand) {
-  const keys = logw.map((lw, i) => ({ i, k: lw === -Infinity ? Infinity : Math.log(-Math.log(1 - rand())) - lw }));
-  keys.sort((a, b) => a.k - b.k);
-  return keys.slice(0, K).filter((x) => x.k < Infinity).map((x) => x.i);
-}
-
 // Spearman's rank correlation (average ranks for ties).
 export function spearman(a, b) {
   const rank = (v) => {
@@ -79,15 +71,4 @@ export function spearman(a, b) {
   let sab = 0, saa = 0, sbb = 0;
   for (let i = 0; i < n; i++) { sab += (ra[i] - ma) * (rb[i] - mb); saa += (ra[i] - ma) ** 2; sbb += (rb[i] - mb) ** 2; }
   return sab / Math.sqrt(saa * sbb);
-}
-
-export function mulberry32(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6D2B79F5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 }

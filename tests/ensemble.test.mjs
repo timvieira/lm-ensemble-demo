@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { logsumexp, logGenMean, tauOf, uOf, summarize, sampleWOR, spearman, mulberry32 } from '../lab/ensemble-math.js';
+import { logsumexp, logGenMean, tauOf, uOf, summarize, spearman } from '../lab/ensemble-math.js';
 
 const close = (a, b, tol = 1e-9) => assert.ok(Math.abs(a - b) <= tol * Math.max(1, Math.abs(b)), `${a} vs ${b}`);
 
@@ -42,17 +42,6 @@ test('importance summaries: Z, ESS bounds, shares', () => {
   close(one.ess, 1, 1e-6);
   const v = [1, 2, 3, 4], t = summarize(v.map(Math.log));
   close(t.ess, 100 / 30); close(Math.exp(t.logZ), 2.5);
-});
-
-test('sampling without replacement: distinct, and first-draw frequencies ∝ weight', () => {
-  const w = [1, 2, 3, 4], lw = w.map(Math.log), rand = mulberry32(7), first = [0, 0, 0, 0], T = 40000;
-  for (let t = 0; t < T; t++) {
-    const s = sampleWOR(lw, 3, rand);
-    assert.equal(new Set(s).size, 3);
-    first[s[0]]++;
-  }
-  first.forEach((c, i) => close(c / T, w[i] / 10, 0.05));
-  assert.deepEqual(sampleWOR([0, -Infinity, 0], 3, mulberry32(1)).sort(), [0, 2]);
 });
 
 test('spearman: perfect, reversed, ties', () => {
