@@ -8,6 +8,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..800;1,400..800&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
 <script type="importmap">
 { "imports": { "d3": "https://cdn.jsdelivr.net/npm/d3@7.9.0/+esm" } }
 </script>
@@ -36,8 +39,12 @@
   .tau .ends { grid-column: 2; display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: -2px; }
   .tau input[type=range] { width: 100%; accent-color: var(--ink); margin: 0; }
   .tau output { font: 13px var(--mono); min-width: 7.5em; }
-  .ticks { grid-column: 2; position: relative; height: 12px; font-size: 10px; color: var(--muted); }
-  .ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; cursor: pointer; }
+  .ticks { grid-column: 2; position: relative; height: 17px; font-size: 10px; color: var(--muted); --thumb: 16px; margin-top: -3px; }
+  .ticks span { position: absolute; top: 0; padding-top: 6px; left: calc(var(--thumb) / 2 + var(--u) * (100% - var(--thumb))); transform: translateX(-50%); white-space: nowrap; cursor: pointer; }
+  .ticks span::before { content: ""; position: absolute; top: 0; left: 50%; width: 1px; height: 5px; background: var(--text-2); opacity: .55; }
+  .ticks span.on { color: var(--text); }
+  .ticks span.on::before { opacity: 1; height: 6px; }
+  .tau input[type=range] { height: 16px; }
   .ticks span:hover { color: var(--text); }
   .pick { display: inline-flex; gap: 2px; padding: 2px; background: rgba(0,0,0,.04); border-radius: 4px; }
   .pick button { font: 12.5px var(--sans); color: var(--text-2); background: transparent; border: 0; border-radius: 3px; padding: 3px 10px; cursor: pointer; white-space: nowrap; }
@@ -47,8 +54,81 @@
   .stepper button { width: 26px; height: 24px; border: 0; background: transparent; border-radius: 3px; cursor: pointer; font: 15px var(--sans); color: var(--text-2); }
   .stepper output { min-width: 26px; text-align: center; font: 500 13px var(--mono); background: #fff; border-radius: 3px; box-shadow: 0 0 0 1px var(--btn-line); padding: 2px 0; }
 
-  .layout { display: grid; grid-template-columns: minmax(0, 1fr) var(--rail-w); min-height: calc(100vh - 150px); }
-  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } .tau { grid-template-columns: auto minmax(0, 1fr) auto; width: 100%; } }
+  .layout { display: grid; grid-template-columns: 340px minmax(0, 1fr) var(--rail-w); min-height: calc(100vh - 120px); }
+  @media (max-width: 1150px) { .layout { grid-template-columns: 340px minmax(0, 1fr); } .rail { grid-column: 1 / -1; } }
+  @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } }
+  .left { padding: 12px 0 12px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  @media (max-width: 760px) { .left { padding: 12px 16px 0; } }
+
+  /* The composer (css/style.css): two prompts, examples under +, settings in a chip, the round red ↑. */
+  .composer { background: #fff; border: 1px solid var(--border); border-radius: var(--r); padding: 10px 10px 8px 14px; display: flex; flex-direction: column; gap: 4px; box-shadow: 0 1px 3px rgb(0 0 0 / .04); }
+  .composer:focus-within { border-color: #cfc7ba; }
+  .composer textarea { width: 100%; border: 0; padding: 2px 0; background: transparent; resize: none; min-height: 28px; font: 17px/1.35 var(--serif); color: var(--text); }
+  .composer textarea:focus { outline: none; }
+  .composer .and { font: italic 13px var(--serif); color: var(--muted); border-top: 1px dashed var(--border); padding-top: 2px; }
+  .comp-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+  .comp-row .grow { flex: 1; }
+  .chip { font: 12.5px var(--sans); color: var(--text-2); background: #f1ede7; border: 0; border-radius: 999px; padding: 5px 11px; cursor: pointer; list-style: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; max-width: 190px; }
+  .chip::after { content: " ▾"; font-size: 10px; color: var(--muted); }
+  .chipmenu { position: relative; min-width: 0; }
+  .chipmenu summary::-webkit-details-marker { display: none; }
+  .chipmenu .menu { position: absolute; left: 0; top: calc(100% + 6px); z-index: 60; display: grid; grid-template-columns: repeat(3, 84px); gap: 8px; padding: 10px; background: #fff; border: 1px solid var(--border); border-radius: var(--r); box-shadow: 0 6px 20px rgb(0 0 0 / .1); }
+  .chipmenu .menu.list { display: flex; flex-direction: column; gap: 0; padding: 6px; width: min(320px, calc(100vw - 48px)); }
+  .menu-head { font: 600 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 4px 8px 6px; }
+  .menu.list button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; border: 0; background: none; padding: 7px 8px; border-radius: 6px; cursor: pointer; color: var(--text); }
+  .menu.list button:hover { background: #f1ede7; }
+  .menu.list button b { font: 600 13px var(--sans); }
+  .menu.list button span { font: 14px/1.3 var(--serif); color: var(--text-2); }
+  .plusbtn { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: #f1ede7; color: var(--text-2); cursor: pointer; list-style: none; }
+  .plusbtn:hover, [open] > .plusbtn { background: #e1dbd1; color: var(--text); }
+  .plusbtn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+  .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .field .lab { font-size: 12px; color: var(--muted); }
+  .wide { grid-column: 1 / -1; }
+  .menu input[type=number], .menu select, .menu textarea { width: 100%; font: 13px var(--mono); color: var(--text); background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 5px 6px; }
+  .menu select { font-family: var(--sans); }
+  .menu textarea { font: 15px/1.3 var(--serif); resize: vertical; min-height: 44px; }
+  .menu-note { grid-column: 1 / -1; margin: 0; font: 12px var(--sans); color: var(--muted); }
+  .sendbtn { width: 34px; height: 34px; flex: none; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--accent); color: #fff; cursor: pointer; padding: 0; }
+  .sendbtn:hover { filter: brightness(.94); }
+  .sendbtn:disabled { opacity: .35; cursor: default; filter: none; }
+  .sendbtn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .status { margin: 0; padding-inline: 6px; color: var(--muted); font-size: 12px; min-height: 1.4em; }
+
+  /* The subset controls, like the main page's T/K panel. */
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; }
+  .panel .row { display: flex; align-items: center; gap: 8px; }
+  .panel .row .grow { flex: 1; }
+  .panel .ctl.tau .lab { white-space: nowrap; }
+  .panel .tau { grid-template-columns: auto minmax(0, 1fr); row-gap: 2px; width: 100%; }
+  .panel .tau output { grid-column: 2; min-width: 0; font-size: 12.5px; }
+
+  /* Messages in the plot area (css/style.css): a failure says what happened and offers the next step. */
+  .stage-msg { position: absolute; inset: 0; z-index: 25; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; padding: 24px; background: rgb(251 250 248 / .9); }
+  .stage-msg p { margin: 0; max-width: 46ch; }
+  .stage-msg .t { font: 500 18px var(--serif); color: var(--accent); }
+  .stage-msg .d { font-size: 13.5px; color: var(--text-2); line-height: 1.45; }
+  .stage-msg .a { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .stage-msg.error { box-shadow: inset 0 3px 0 var(--accent); }
+  .btn { font: 14px var(--sans); color: var(--text-2); background: transparent; border: 1px solid #ddd; border-radius: 4px; padding: 6px 14px; cursor: pointer; }
+  .btn:hover { background: rgba(0,0,0,.04); color: var(--text); }
+  .viewmenu { position: absolute; right: 18px; bottom: 14px; z-index: 20; }
+  .viewmenu summary { list-style: none; cursor: pointer; font-size: 12.5px; color: var(--text-2); padding: 3px 10px; border-radius: 4px; border: 1px solid transparent; background: rgb(251 250 248 / .8); }
+  .viewmenu summary::-webkit-details-marker { display: none; }
+  .viewmenu summary::after { content: " ▾"; color: var(--muted); font-size: 10px; }
+  .viewmenu[open] summary { border-color: var(--btn-line); background: #fff; }
+  .viewmenu .menu { position: absolute; right: 0; bottom: calc(100% + 4px); display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px 12px; background: #fff; border: 1px solid var(--border); border-radius: var(--r); box-shadow: 0 4px 16px rgb(0 0 0 / .08); white-space: nowrap; font-size: 12px; color: var(--muted); }
+
+  /* "?" explainers (css/style.css; js/explain.js). */
+  .xbtn { display: inline-block; padding: 1px 3.5px; margin: 0 0 0 1px; vertical-align: baseline; position: relative; top: -0.55em; border: 1px solid #cfc8bc; border-radius: 999px; background: #fff; color: var(--text-2); font: 600 8.5px/1 var(--sans); cursor: pointer; flex: none; }
+  .xbtn:hover, .xbtn[aria-expanded=true] { color: var(--text); border-color: var(--text-2); }
+  .xbtn::after { content: ""; position: absolute; inset: -10px; }
+  .xpop { position: absolute; z-index: 100; background: #fff; color: var(--text); border: 1px solid var(--border); border-left: 3px solid var(--text-2); border-radius: var(--r); box-shadow: 0 6px 22px rgb(0 0 0 / .14); padding: 10px 34px 10px 14px; font: 15.5px/1.45 var(--serif); }
+  .xpop p { margin: .4em 0; }
+  .xpop ul { margin: .3em 0; padding-left: 1.2em; }
+  .xpop .katex-display { margin: .5em 0; overflow-x: auto; overflow-y: hidden; }
+  .xp-title { font: 600 13px var(--sans); color: var(--text-2); margin-bottom: 2px; }
+  .xp-close { position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; border: 0; background: none; color: var(--muted); font-size: 18px; cursor: pointer; border-radius: 4px; }
   .stage { position: relative; min-width: 0; padding: 8px 12px; }
   #plot { width: 100%; height: min(78vh, 760px); min-height: 360px; display: block; touch-action: none; }
   #plot text { font-family: var(--sans); }
@@ -85,34 +165,67 @@
   <h1>Prompt intersection</h1>
   <nav class="links"><a href="https://arxiv.org/abs/2603.05432" target="_blank" rel="noopener">Paper ↗</a><a href="../">The diversity demo ↗</a></nav>
   <p class="lede">Completions likely under two prompts at once: an ensemble of a language model with itself.</p>
-  <p class="note"><b>Prototype.</b> Unlinked and changing; <span id="data-note">cached completions only</span>.</p>
+  <p class="note"><b>Prototype.</b> Unlinked and changing; only the example pairs have completions so far.</p>
 </header>
 
-<div class="controls">
-  <label class="ctl"><span class="lab">Prompts</span><select id="preset" aria-label="Prompt pair"></select></label>
-  <div class="ctl tau">
-    <span class="lab" title="The power τ of the generalised mean">τ</span>
-    <input id="tau" type="range" min="0" max="1000" step="1" value="500" aria-label="τ">
-    <output id="tau-out"></output>
-    <div class="ticks" id="ticks"></div>
-    <span class="ends" aria-hidden="true"><span>agreement</span><span>coverage</span></span>
-  </div>
-  <div class="ctl"><span class="lab">K</span><span class="stepper"><button id="k-minus" aria-label="Fewer">−</button><output id="k">5</output><button id="k-plus" aria-label="More">+</button></span></div>
-  <span class="pick" role="group" aria-label="How to choose"><button data-mode="map" aria-pressed="true">Most likely</button><button data-mode="sample" aria-pressed="false">Sample</button></span>
-  <span class="ctl"><span class="lab">Scored</span><span class="pick" role="group" aria-label="Scored"><button data-score="global" aria-pressed="true">global</button><button data-score="local" aria-pressed="false">local</button></span></span>
-</div>
-
 <div class="layout">
+  <div class="left">
+    <div class="composer">
+      <textarea id="pa" rows="1" spellcheck="false" aria-label="Prompt A" placeholder="Prompt A, e.g. My favorite physicist is"></textarea>
+      <div class="and">and<button type="button" class="xbtn" data-x="prompts" aria-label="What are the two prompts?">?</button></div>
+      <textarea id="pb" rows="1" spellcheck="false" aria-label="Prompt B" placeholder="Prompt B, e.g. My favorite author is"></textarea>
+      <div class="comp-row">
+        <details class="chipmenu" id="exmenu">
+          <summary class="plusbtn" aria-label="Example prompts" title="Example prompts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary>
+          <div class="menu list" id="examples" role="menu"></div>
+        </details>
+        <details class="chipmenu" id="adv">
+          <summary class="chip" aria-label="Settings"><span id="adv-sum">Qwen3 14B · 200 samples</span></summary>
+          <div class="menu">
+            <label class="field wide"><span class="lab">Model<button type="button" class="xbtn" data-x="model" aria-label="About the model">?</button></span><select id="model"><option value="qwen3-14b">Qwen3 14B, 4-bit (AWQ) · Modal</option></select></label>
+            <label class="field wide"><span class="lab">Drawn from<button type="button" class="xbtn" data-x="proposal" aria-label="How are the completions drawn?">?</button></span><select id="proposal"><option value="local_product">the token-level product of A and B</option></select></label>
+            <label class="field"><span class="lab">Samples N<button type="button" class="xbtn" data-x="N" aria-label="What is N?">?</button></span><input id="n" type="number" min="2" max="200" step="10" value="200"></label>
+            <label class="field"><span class="lab">Temp. T′<button type="button" class="xbtn" data-x="Tprime" aria-label="What is T′?">?</button></span><input id="tp" type="number" min="0.2" max="2" step="0.1" value="1.0"></label>
+            <label class="field"><span class="lab">Max tokens<button type="button" class="xbtn" data-x="maxtok" aria-label="What is max tokens?">?</button></span><input id="maxtok" type="number" min="8" max="256" step="8" value="32"></label>
+            <label class="field wide"><span class="lab">The explicit “A and B” prompt, for checking<button type="button" class="xbtn" data-x="promptC" aria-label="What is the explicit prompt?">?</button></span><textarea id="pc" rows="2" spellcheck="false" placeholder="e.g. My favorite physicist and author is"></textarea></label>
+            <p class="menu-note">Each completion stops at its first period.<button type="button" class="xbtn" data-x="stop" aria-label="Why stop at a period?">?</button></p>
+          </div>
+        </details>
+        <span class="grow"></span>
+        <button id="go" class="sendbtn" aria-label="Generate completions" title="Generate (Enter)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button>
+      </div>
+    </div>
+    <p id="status" class="status" aria-live="polite"></p>
+
+    <section class="panel" aria-label="Choosing completions">
+      <div class="ctl tau">
+        <span class="lab"><span title="The power τ of the generalised mean">τ</span><button type="button" class="xbtn" data-x="tau" aria-label="What does τ do?">?</button></span>
+        <input id="tau" type="range" min="0" max="1000" step="1" value="500" aria-label="τ">
+        <div class="ticks" id="ticks"></div>
+        <span class="ends" aria-hidden="true"><span>agreement</span><span>coverage</span></span>
+        <output id="tau-out"></output>
+      </div>
+      <div class="row">
+        <span class="ctl"><span class="lab">K</span><span class="stepper"><button id="k-minus" aria-label="Fewer">−</button><output id="k">5</output><button id="k-plus" aria-label="More">+</button></span></span>
+        <span class="grow"></span>
+        <span class="pick" role="group" aria-label="How to choose"><button data-mode="map" aria-pressed="true">Most likely</button><button data-mode="sample" aria-pressed="false">Sample</button></span><button type="button" class="xbtn" data-x="choose" aria-label="How are the K chosen?">?</button>
+      </div>
+    </section>
+  </div>
   <section class="stage">
     <svg id="plot" role="img" aria-label="Each completion at (log p under prompt A, log p under prompt B)"></svg>
-    <div id="empty" class="empty" hidden></div>
+    <div id="stage-msg" class="stage-msg" hidden></div>
+    <details class="viewmenu" id="viewmenu">
+      <summary>View</summary>
+      <div class="menu"><span>Scored<button type="button" class="xbtn" data-x="scored" aria-label="Global or local scores?">?</button></span><span class="pick" role="group" aria-label="Scored"><button data-score="global" aria-pressed="true">global (strings)</button><button data-score="local" aria-pressed="false">local (tokens)</button></span></div>
+    </details>
   </section>
   <aside class="rail">
     <h2>Selected</h2>
     <p class="sub" id="sel-sub"></p>
     <div class="readout" id="readout"></div>
     <ol class="cards" id="cards"></ol>
-    <h2 style="margin-top:18px">Against the “A and B” prompt</h2>
+    <h2 style="margin-top:18px">Against the “A and B” prompt<button type="button" class="xbtn" data-x="valid" aria-label="What does this check?">?</button></h2>
     <p class="sub" id="valid-sub"></p>
     <svg id="valid" aria-label="Each completion's score against its log p under the explicit prompt"></svg>
     <details class="about">
@@ -125,6 +238,7 @@
   </aside>
 </div>
 <div id="tip" hidden></div>
+<div id="xpop" class="xpop" role="dialog" hidden></div>
 <script type="module" src="ensemble.js"></script>
 </body>
 </html>

@@ -2,41 +2,88 @@
 // Brief: docs/handoff-ensemble-demo.md. Pools: data/ensemble/<preset>.json (modal/ensemble_lib.py).
 import * as d3 from 'd3';
 import { logGenMean, tauOf, uOf, tauName, NAMED, summarize, sampleWOR, spearman, mulberry32, logsumexp } from './ensemble-math.js';
+import { EXPLAIN, initExplainers } from '../js/explain.js';
 
 const DATA = '../data/ensemble/';
 const $ = (s) => document.querySelector(s);
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmt = (x, d = 1) => (Number.isFinite(x) ? x.toFixed(d) : String(x));
+const xb = (k) => `<button type="button" class="xbtn" data-x="${k}" aria-label="Explain">?</button>`;
 const words = (t, n = 5) => { const w = t.trim().split(/\s+/); return w.length > n ? w.slice(0, n).join(' ') + '…' : w.join(' '); };
 
 const S = { presets: [], pool: null, groups: [], u: 0.5, K: 5, mode: 'map', score: 'global', draw: 1, sel: [], open: new Set(), hover: -1 };
 
 // ---------------------------------------------------------------- data
 async function init() {
+  Object.assign(EXPLAIN, ENSEMBLE_EXPLAIN);
+  initExplainers();
   S.presets = await (await fetch(DATA + 'presets.json')).json();
-  $('#preset').innerHTML = S.presets.map((p) => `<option value="${p.id}">${esc(p.label)}</option>`).join('');
-  $('#preset').onchange = () => load($('#preset').value);
+  const ex = $('#examples');
+  ex.innerHTML = '<div class="menu-head">Example pairs</div>' + S.presets.map((p, i) =>
+    `<button type="button" role="menuitem" data-i="${i}"><b>${esc(p.label)}</b><span>${esc(p.A)} · ${esc(p.B)}</span></button>`).join('');
+  ex.querySelectorAll('button').forEach((b) => (b.onclick = () => { $('#exmenu').open = false; fill(S.presets[+b.dataset.i]); settingsChanged(); }));
   wire();
-  await load(S.presets[0].id);
+  fill(S.presets[0]);
+  await settingsChanged();
 }
+
+// ---------------------------------------------------------------- the composer
+// Cached pools exist only for the example pairs at their settings; anything else needs a live run, which this
+// prototype does not have yet (docs/handoff-ensemble-demo.md, A7). The page says so instead of hiding the controls.
+const DEFAULTS = { N: 200, Tprime: 1.0, maxNewTokens: 32 };
+function fill(p) { $('#pa').value = p.A; $('#pb').value = p.B; $('#pc').value = p.C ?? ''; syncGo(); }
+function readConfig() {
+  return { A: $('#pa').value.trim(), B: $('#pb').value.trim(), C: $('#pc').value.trim(),
+    N: Math.round(+$('#n').value), Tprime: Math.round(10 * +$('#tp').value) / 10, maxNewTokens: Math.round(+$('#maxtok').value) };
+}
+function cachedFor(c) {
+  const p = S.presets.find((x) => x.A === c.A && x.B === c.B);
+  const same = c.N === DEFAULTS.N && c.Tprime === DEFAULTS.Tprime && c.maxNewTokens === DEFAULTS.maxNewTokens;
+  return p && same && (!c.C || c.C === p.C) ? p : null;
+}
+function syncGo() { $('#go').disabled = !($('#pa').value.trim() && $('#pb').value.trim()); $('#adv-sum').textContent = `Qwen3 14B · ${$('#n').value} samples`; }
+async function settingsChanged() {
+  syncGo();
+  const c = readConfig(), p = cachedFor(c);
+  if (p) { if (S.pool?.id !== p.id) await load(p.id); stageMsg(null); return; }
+  if (S.pool) setStatus('The plot is from earlier prompts or settings. Press ↑.');
+}
+function run() {
+  const c = readConfig();
+  if (!c.A || !c.B) return;
+  const p = cachedFor(c);
+  if (p) { load(p.id); stageMsg(null); return; }
+  const near = S.presets.find((x) => x.A === c.A && x.B === c.B);
+  stageMsg(near
+    ? { title: 'No completions for these settings yet.',
+        detail: `This prototype has completions for the example pairs at N ${DEFAULTS.N}, T′ ${DEFAULTS.Tprime.toFixed(1)} and ${DEFAULTS.maxNewTokens} tokens only.`,
+        actions: '<button type="button" class="btn" data-act="reset">Use those settings</button>' }
+    : { title: 'Live runs aren’t connected yet.',
+        detail: 'This prototype only has completions for the example pairs. Running your own prompts needs the ensemble route on Modal, which is not live yet.',
+        actions: '<button type="button" class="btn" data-act="example">Use an example</button>' });
+}
+function stageMsg(m) {
+  const el = $('#stage-msg');
+  if (!m) { el.hidden = true; el.innerHTML = ''; return; }
+  el.className = 'stage-msg error';
+  el.innerHTML = `<p class="t">${m.title}</p><p class="d">${m.detail}</p><div class="a">${m.actions}${S.pool ? '<button type="button" class="btn" data-act="dismiss">Dismiss</button>' : ''}</div>`;
+  el.hidden = false;
+  el.querySelectorAll('[data-act]').forEach((b) => (b.onclick = () => {
+    const a = b.dataset.act;
+    if (a === 'dismiss') stageMsg(null);
+    if (a === 'example') { stageMsg(null); setTimeout(() => { $('#exmenu').open = true; }); }   // after this click's close-menus pass
+    if (a === 'reset') { $('#n').value = DEFAULTS.N; $('#tp').value = DEFAULTS.Tprime.toFixed(1); $('#maxtok').value = DEFAULTS.maxNewTokens; settingsChanged(); }
+  }));
+}
+function setStatus(t) { $('#status').textContent = t; }
 
 async function load(id) {
   const r = await fetch(DATA + id + '.json').catch(() => null);
-  if (!r || !r.ok) {
-    S.pool = null;
-    $('#plot').style.display = 'none';
-    $('#empty').hidden = false;
-    $('#empty').textContent = 'No completions for this pair yet.';
-    $('#cards').innerHTML = ''; $('#readout').innerHTML = ''; $('#sel-sub').textContent = '';
-    return;
-  }
+  if (!r || !r.ok) { stageMsg({ title: 'These completions could not be loaded.', detail: 'Reload the page to try again.', actions: '' }); return; }
   const pool = await r.json();
   S.pool = pool;
-  $('#plot').style.display = ''; $('#empty').hidden = true;
-  $('#data-note').textContent = pool.standIn
-    ? `stand-in data: ${pool.N} completions from ${pool.model.split('/').pop()} on a CPU; the demo will use Qwen3 14B`
-    : `${pool.N} cached completions from ${pool.model.split('/').pop()}`;
+  setStatus(`${pool.standIn ? 'Stand-in data' : 'Cached'}: ${pool.N} completions from ${pool.model.split('/').pop()}, drawn on ${pool.standIn ? 'a CPU' : 'Modal'}.`);
   // One group per distinct string; copies share every score.
   const byText = new Map();
   pool.samples.forEach((s, i) => { const g = byText.get(s.text); if (g) g.idx.push(i); else byText.set(s.text, { i, idx: [i] }); });
@@ -53,6 +100,7 @@ function scoreOf(s) { return S.score === 'local' ? s.loglocal : logGenMean([s.lo
 function update() {
   if (!S.pool) return;
   const P = S.pool, T = tau(), name = tauName(T);
+  document.querySelectorAll('#ticks span').forEach((t) => t.classList.toggle('on', S.score === 'global' && Math.abs(+t.dataset.u - S.u) < 1e-9));
   $('#tau-out').textContent = S.score === 'local' ? 'local product' : `${name ?? 'τ = ' + fmt(T, 2)}${name && Number.isFinite(T) ? ` (τ = ${T})` : ''}`;
   const score = P.samples.map(scoreOf);
   const logv = P.samples.map((s, i) => score[i] - s.logr);    // importance weights: target / proposal
@@ -76,8 +124,8 @@ function readouts(score) {
   const P = S.pool, N = P.N, distinct = S.groups.length;
   $('#sel-sub').textContent = `K = ${S.sel.length} · ${S.mode === 'map' ? 'most likely' : 'sampled'} · ${N} completions, ${distinct} distinct`;
   const rows = [
-    ['Uses', `${fmt(S.sum.ess, 1)} of ${N} completions`],
-    ['log Ẑ', fmt(S.sum.logZ, 2)],
+    [`Uses${xb('ess')}`, `${fmt(S.sum.ess, 1)} of ${N} completions`],
+    [`log Ẑ${xb('logZ')}`, fmt(S.sum.logZ, 2)],
   ];
   $('#readout').innerHTML = rows.map(([k, v]) => `<span>${k}</span><span class="v">${v}</span>`).join('');
 }
@@ -88,13 +136,13 @@ function cards(sel, gShare) {
     const G = S.groups[g], s = P.samples[G.i];
     return `<li class="card${S.open.has(G.i) ? ' open' : ''}" data-i="${G.i}">
       <div class="txt">${esc(s.text.trim())}${s.ended ? '' : ' …'}</div>
-      <div class="meta"><span class="dot"></span>${G.idx.length > 1 ? `×${G.idx.length} · ` : ''}log p<sub>A</sub> ${fmt(s.logpA)} · log p<sub>B</sub> ${fmt(s.logpB)} · share ${fmt(100 * gShare[g], 1)}%${s.ended ? '' : `<span class="cutoff">cut off at ${s.nTokens} tokens</span>`}</div></li>`;
+      <div class="meta"><span class="dot"></span>${G.idx.length > 1 ? `×${G.idx.length} · ` : ''}log p<sub>A</sub> ${fmt(s.logpA)} · log p<sub>B</sub> ${fmt(s.logpB)} · share ${fmt(100 * gShare[g], 1)}%${xb('share')}${s.ended ? '' : `<span class="cutoff">cut off at ${s.nTokens} tokens</span>`}</div></li>`;
   }).join('');
   $('#cards').querySelectorAll('.card').forEach((el) => {
     const i = +el.dataset.i;
     el.onmouseenter = () => plot.highlight(i);
     el.onmouseleave = () => plot.highlight(-1);
-    el.onclick = () => { el.classList.toggle('open'); if (el.classList.contains('open')) S.open.add(i); else S.open.delete(i); };
+    el.onclick = (e) => { if (e.target.closest('.xbtn')) return; el.classList.toggle('open'); if (el.classList.contains('open')) S.open.add(i); else S.open.delete(i); };
   });
 }
 
@@ -250,7 +298,7 @@ const valid = {
 // ---------------------------------------------------------------- controls
 function wire() {
   const ticks = $('#ticks');
-  ticks.innerHTML = NAMED.filter((t) => t.name !== 'quadratic').map((t) => `<span style="left:${100 * uOf(t.tau)}%" data-u="${uOf(t.tau)}">${t.name}</span>`).join('');
+  ticks.innerHTML = NAMED.filter((t) => t.name !== 'quadratic').map((t) => `<span style="--u:${uOf(t.tau)}" data-u="${uOf(t.tau)}">${t.name}</span>`).join('');
   ticks.querySelectorAll('span').forEach((s) => (s.onclick = () => { S.u = +s.dataset.u; $('#tau').value = Math.round(1000 * S.u); update(); }));
   let raf = 0;
   $('#tau').oninput = (e) => {
@@ -259,6 +307,10 @@ function wire() {
     S.u = u;
     cancelAnimationFrame(raf); raf = requestAnimationFrame(update);
   };
+  ['#pa', '#pb', '#pc', '#n', '#tp', '#maxtok'].forEach((id) => $(id).addEventListener('input', () => { clearTimeout(S.ct); S.ct = setTimeout(settingsChanged, 250); }));
+  ['#pa', '#pb'].forEach((id) => $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); run(); } }));
+  $('#go').onclick = run;
+  document.addEventListener('click', (e) => { for (const id of ['#exmenu', '#adv', '#viewmenu']) { const m = $(id); if (m.open && !e.composedPath().includes(m) && !e.target.closest('.xpop')) m.open = false; } });
   const setK = (k) => { S.K = Math.max(1, Math.min(20, k)); $('#k').textContent = S.K; update(); };
   $('#k-minus').onclick = () => setK(S.K - 1);
   $('#k-plus').onclick = () => setK(S.K + 1);
@@ -277,5 +329,73 @@ function wire() {
   let rt = 0;
   new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { if (S.pool) { plot.reset(); plot.draw(); valid.draw(S.scoreArr); } }, 150); }).observe($('#plot'));
 }
+
+// ---------------------------------------------------------------- the "?" explainers (js/explain.js renders them)
+const ENSEMBLE_EXPLAIN = {
+  prompts: {
+    title: 'Two prompts',
+    body: `<p>The same language model, prompted two ways. Each completion $y$ gets a probability from each: $p_A(y)$ after prompt A and $p_B(y)$ after prompt B. The page looks for completions that are likely under <i>both</i>: for “My favorite physicist is” and “My favorite author is”, physicists who also write.</p>
+      <p>Combining the two is <b>ensembling</b> the model with itself.</p>`,
+  },
+  tau: {
+    title: 'τ: how the two prompts are combined',
+    body: `<p>Each completion's score combines its two probabilities with a generalised mean:
+      $$\varphi_\tau(y) = \Big(\tfrac12\, p_A(y)^\tau + \tfrac12\, p_B(y)^\tau\Big)^{1/\tau}.$$</p>
+      <ul>
+        <li><b>min</b> ($\tau = -\infty$): only as good as the prompt that likes it less. Strict agreement.</li>
+        <li><b>harmonic</b> ($\tau = -1$) and <b>product</b> ($\tau \to 0$, $\sqrt{p_A p_B}$): agreement, less strictly. The product is the paper's main ensemble.</li>
+        <li><b>sum</b> ($\tau = 1$): a mixture; either prompt liking it helps.</li>
+        <li><b>max</b> ($\tau = +\infty$): good if either prompt likes it. Coverage.</li>
+      </ul>
+      <p>Each value of $\tau$ is the distribution closest to both prompts under one α-divergence ($\alpha = 1 - \tau$). The grey lines in the plot are where $\varphi_\tau$ is constant.</p>`,
+  },
+  choose: {
+    title: 'How the K completions are chosen',
+    body: `<p><b>Most likely</b> takes the K distinct completions with the highest score. In the plot, they are the ones beyond the red dashed line.</p>
+      <p><b>Sample</b> draws K at random, each with probability proportional to its importance weight
+      $$w(y) = \frac{\varphi_\tau(y)}{r(y)},$$
+      the score divided by the probability $r(y)$ with which the completion was drawn. That undoes how the completions were drawn, so the draw approximates the ensemble over all strings. Press Sample again for another draw.</p>`,
+  },
+  scored: {
+    title: 'Global or local scores',
+    body: `<p><b>Global</b> scores each whole string: $\varphi_\tau(y)$ from the two prompts' probabilities of the complete completion. This is the ensemble the paper targets.</p>
+      <p><b>Local</b> uses the token-level product: at every step, multiply the two prompts' next-token probabilities and renormalise. That is how ensembling is usually done, and it is not the same thing. It rewards tokens both prompts like one at a time, so generic openings (“a”, “the”) gain and specific answers can lose (the paper's Fig. 1: “a great guy.” rises, “Carl Sagan.” falls). The local score exists only for the product, so τ is off while it is on.</p>`,
+  },
+  proposal: {
+    title: 'Where the completions come from',
+    body: `<p>The completions are drawn from the token-level product of A and B: each next token is picked with probability proportional to $p_A \cdot p_B$ (at temperature $T'$). The probability of drawing a completion, $r(y)$, is recorded, so <b>Sample</b> can correct for it.</p>
+      <p>The paper's Fig. 1 used beam search; drawing at random is needed here because the corrections need $r(y)$. Other choices (A alone, B alone, a mixture) are planned.</p>`,
+  },
+  model: {
+    title: 'The model',
+    body: `<p>Qwen3 14B with 4-bit (AWQ) weights, the same weights as the diversity demo, run on Modal's GPU. The prompts are continued as plain text, without a chat template, like the paper's GPT-2 example.</p>`,
+  },
+  N: { title: 'Samples N', body: `<p>How many completions are drawn. Every score, selection and readout is computed from these N; more completions represent the ensemble better.</p>` },
+  Tprime: { title: 'Sampling temperature T′', body: `<p>The temperature at which each token is drawn: $r(y_t \mid y_{<t}) \propto (p_A \cdot p_B)^{1/T'}$. At $T' = 1$ the draws follow the token-level product exactly.</p>` },
+  maxtok: { title: 'Max tokens', body: `<p>A completion stops at its first period, or after this many tokens. One that hits the limit is marked “cut off”.</p>` },
+  stop: { title: 'Stopping at a period', body: `<p>As in the paper, every completion is a short answer ending in a period. It also stops at an abbreviation (“Dr.”) or a decimal point (“0.”): an open choice for this prototype.</p>` },
+  promptC: {
+    title: 'The explicit prompt',
+    body: `<p>A third prompt that asks for both at once, e.g. “My favorite physicist and author is”. It is not used to choose anything; it checks which ensemble behaves like asking directly. In the paper the global ensemble agrees with it closely ($\rho = 0.96$) and the local one does not ($\rho = 0.09$).</p>`,
+  },
+  valid: {
+    title: 'Checking against the explicit prompt',
+    body: `<p>Each dot is a completion: across, its ensemble score (global at the current $\tau$, or local); up, its log-probability after the explicit “A and B” prompt. $\rho$ is Spearman's rank correlation: 1 means both put the completions in the same order.</p>`,
+  },
+  ess: {
+    title: 'Uses n of N completions',
+    body: `<p>The effective sample size of the importance weights,
+      $$\mathrm{ESS} = \frac{(\sum_i w_i)^2}{\sum_i w_i^2},$$
+      between 1 and N. It says how many completions <b>Sample</b> really rests on: when a few weights dominate, the estimate is only as good as those few.</p>`,
+  },
+  logZ: {
+    title: 'log Ẑ',
+    body: `<p>The estimated normaliser of the ensemble, $\hat Z = \frac1N\sum_i w_i$: an unbiased estimate of $Z = \sum_y \varphi_\tau(y)$ over all strings. Small means the two prompts share little probability.</p>`,
+  },
+  share: {
+    title: 'Share',
+    body: `<p>The completion's share of the estimated ensemble, $w(y) / \sum_i w_i$ (summed over copies of the same text): how much of the ensemble's probability, among these N completions, falls on it.</p>`,
+  },
+};
 
 init();
