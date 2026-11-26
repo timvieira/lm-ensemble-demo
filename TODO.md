@@ -87,11 +87,21 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
 - **Done: the deploy token** (26 Nov). The repository secret HF_TOKEN is set (Tim); the first deploy uploaded space/ to
   the Space (its commit b7bb356). The upload followed Hugging Face's redirect from xtimv/lm-ensemble-demo, so it works
   before the rename too.
-- **Untested on ZeroGPU:** loading Qwen3 14B (unpacked AWQ) there, the GPU time reserved per run (space/app.py,
-  _duration: a guess, not measured), and the quota message (ZeroGPU's own error text, matched by "quota"). Tested on
-  the laptop's CPU with GPT-2 and Qwen3 0.6B: pools through the page's own client (scripts/space-check.mjs), sampling
-  sums match teacher-forced scores to about 1e-4 nats, every bad request refused with a code, and the page end to end
-  (a run, its status line, and the message when the Space cannot be reached).
+- **Tested on ZeroGPU** (26 Nov, through the page's own client, scripts/space-check.mjs, on Tim's quota): the Space built
+  and ran on zero-a10g in about 3 minutes; it offers Qwen3 14B (the unpacked AWQ weights) and GPT-2; Gradio 6.32's
+  queue protocol works with js/space.js. Pools: GPT-2 text n = 4; Qwen3 14B text n = 8, chat n = 4, and text n = 200 at
+  32 tokens (the page's default) in 17.5 s (9 s sampling, 8 s rescoring). With seed 0 the first Qwen3 completion
+  starts as in the cached Modal pool ("Kip Thorne, and I'm trying to understand...") and then diverges: the same
+  weights on another GPU round differently.
+- **The self-check differs by up to 0.11 nats on ZeroGPU** (sampling sums against teacher-forced scores, both in fp16:
+  0.049 text, 0.106 chat, 0.073 text at n = 200). The record reports it as checkMaxAbsErr; nothing here filters on it.
+  dpp-lm-demo's pools workflow fails a pool above 0.5 nats and reports 0.09 seen on Modal. The page uses the sampling
+  sums (logpA, logpB).
+- **The GPU time reserved per run is about 4 times what a run takes** (space/app.py, _duration: 68 s reserved for n =
+  200 at 32 tokens; 17 s measured). Open: whether ZeroGPU charges the visitor's quota by the time reserved or used; if
+  reserved, a tighter estimate saves visitors' quota (but a run that outlasts its reservation is cut off).
+- **Untested on ZeroGPU:** the quota message (ZeroGPU's own error text, matched by "quota"), and a run from the page
+  itself (it needs sign-in, which needs the redirect URI above).
 
 ### Untested after the move
 - Hugging Face sign-in end to end, and a live run (/ensemble_sample) from this address.
