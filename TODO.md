@@ -73,8 +73,9 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   (or after `gh auth refresh -s workflow`).
 
 ### In progress (26 Nov)
-- When it has settled: send Robin Chan the link on Zulip (Tim). Not sent yet: the Claude in Chrome extension is not
-  allowed on zulip.rycolab.inf.ethz.ch, and there is no Zulip API key on the laptop (no ~/.zuliprc).
+- When it has settled: send Robin Chan the link on Zulip (Tim). Not sent yet: Tim chose to fix the Hugging Face
+  sign-in first (the redirect URI, above). The text is approved (26 Nov); it goes as a direct message to Robin
+  (Zulip user 253) through the Zulip API with ~/zuliprc on Tim's laptop.
 
 ### Done (26 Nov)
 - **The diversity demo's full-page layout** (Tim): on wide screens the plot is the page. The title and the controls
