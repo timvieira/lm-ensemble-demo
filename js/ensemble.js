@@ -1,8 +1,10 @@
 // Prompt intersection: a prototype for "Ensembling Language Models with SMC" (arXiv:2603.05432, Fig. 1).
-// Brief: docs/handoff-ensemble-demo.md. Pools: data/ensemble/<preset>.json (modal/ensemble_lib.py).
+// Brief: docs/handoff-ensemble-demo.md. Cached pools: data/ensemble/<pair>.<model>.<format>.json; live runs: the
+// Modal app's /ensemble_sample (modal/app.py), both made by modal/ensemble_lib.py.
 import * as d3 from 'd3';
 import { logGenMean, tauOf, uOf, tauName, NAMED, summarize, spearman } from './ensemble-math.js';
 import { EXPLAIN, initExplainers } from '../js/explain.js';
+import { getAuth, signIn, signOut, finishSignIn } from '../js/hfauth.js';
 
 const DATA = '../data/ensemble/';
 const $ = (s) => document.querySelector(s);
@@ -20,13 +22,25 @@ async function init() {
   initExplainers();
   S.presets = await (await fetch(DATA + 'presets.json')).json();
   wire();
-  fillExamples();
+  syncModel();
   fill(S.presets[0]);
+  // Back from signing in with Hugging Face: restore the settings and run, as on the diversity demo.
+  const back = await finishSignIn().catch(() => null);
+  if (back?.stash?.cfg) restore(back.stash.cfg);
   await settingsChanged();
+  if (back?.auth && back.stash?.cfg) run();
+  else if (back?.error) stageMsg({ title: 'Signing in was cancelled.', detail: esc(back.error), actions: signInBtn() });
 }
 
-// The prompt format: "text" continues the prompts as plain text (the paper's Fig. 1); "chat" puts them in the
-// model's chat template as user messages, and the completions are its replies. Same weights either way.
+// The model and the prompt format. "text" continues the prompts as plain text (the paper's Fig. 1); "chat" puts
+// them in the model's chat template as user messages, and the completions are its replies. GPT-2 has no chat
+// template, so it offers "text" only.
+const MODELS = {
+  'qwen3-14b': { label: 'Qwen3 14B', formats: ['text', 'chat'] },
+  gpt2: { label: 'GPT-2', formats: ['text'] },
+};
+const MODAL_URL = 'https://timvieira--dpp-lm-sampler-web.modal.run';
+const pmodel = () => $('#model').value;
 const pfmt = () => $('#fmt').value;   // the prompt format
 const FORMAT_UI = {
   text: { a: 'Prompt A, e.g. My favorite physicist is', b: 'Prompt B, e.g. My favorite author is', c: 'e.g. My favorite physicist and author is',
@@ -43,72 +57,141 @@ function fillExamples() {
   $('#pa').placeholder = u.a; $('#pb').placeholder = u.b; $('#pc').placeholder = u.c;
   $('#fmt-note').innerHTML = u.note;
 }
-function setFormat() {
-  // An example pair keeps being that example in the other format; typed prompts stay as typed.
-  const was = pfmt() === 'chat' ? 'text' : 'chat', c = readConfig();
-  const p = S.presets.find((x) => x[was].A === c.A && x[was].B === c.B);
+// The formats the chosen model offers; a format it lacks is shown but disabled, and the choice moves to one it has.
+function syncModel() {
+  const m = MODELS[pmodel()];
+  [...$('#fmt').options].forEach((o) => { o.disabled = !m.formats.includes(o.value); });
+  if (!m.formats.includes(pfmt())) { const c = readConfig(); $('#fmt').value = m.formats[0]; keepExample(c, 'chat'); }
   fillExamples();
+}
+// An example pair stays that example in another format; typed prompts stay as typed.
+function keepExample(c, was) {
+  const p = S.presets.find((x) => x[was].A === c.A && x[was].B === c.B);
   if (p) fill(p);
+}
+function setFormat() {
+  const was = pfmt() === 'chat' ? 'text' : 'chat', c = readConfig();
+  fillExamples();
+  keepExample(c, was);
   settingsChanged();
 }
-
-// ---------------------------------------------------------------- the composer
-// Cached pools exist only for the example pairs at their settings; anything else needs a live run, which this
-// prototype does not have yet (docs/handoff-ensemble-demo.md, A7). The page says so instead of hiding the controls.
 const DEFAULTS = { N: 200, Tprime: 1.0, maxNewTokens: 32 };
 function fill(p) { const q = p[pfmt()]; $('#pa').value = q.A; $('#pb').value = q.B; $('#pc').value = q.C ?? ''; syncGo(); }
 function readConfig() {
-  return { A: $('#pa').value.trim(), B: $('#pb').value.trim(), C: $('#pc').value.trim(),
+  return { model: pmodel(), fmt: pfmt(), A: $('#pa').value.trim(), B: $('#pb').value.trim(), C: $('#pc').value.trim(),
     N: Math.round(+$('#n').value), Tprime: Math.round(10 * +$('#tp').value) / 10, maxNewTokens: Math.round(+$('#maxtok').value) };
 }
-function cachedFor(c) {
-  const f = pfmt(), p = S.presets.find((x) => x[f].A === c.A && x[f].B === c.B);
-  const same = c.N === DEFAULTS.N && c.Tprime === DEFAULTS.Tprime && c.maxNewTokens === DEFAULTS.maxNewTokens;
-  return p && same && (!c.C || c.C === p[f].C) ? p : null;
+function restore(c) {
+  $('#model').value = c.model; syncModel(); $('#fmt').value = c.fmt; fillExamples();
+  $('#pa').value = c.A; $('#pb').value = c.B; $('#pc').value = c.C;
+  $('#n').value = c.N; $('#tp').value = c.Tprime.toFixed(1); $('#maxtok').value = c.maxNewTokens;
+  syncGo();
 }
-const poolKey = (p) => `${p.id}.${pfmt()}`;
-function syncGo() { $('#go').disabled = !($('#pa').value.trim() && $('#pb').value.trim()); $('#adv-sum').textContent = `Qwen3 14B · ${$('#n').value} samples`; }
+function cachedFor(c) {
+  const p = S.presets.find((x) => x[c.fmt].A === c.A && x[c.fmt].B === c.B);
+  const same = c.N === DEFAULTS.N && c.Tprime === DEFAULTS.Tprime && c.maxNewTokens === DEFAULTS.maxNewTokens;
+  return p && same && (!c.C || c.C === p[c.fmt].C) ? p : null;
+}
+const poolKey = (p, c) => `${p.id}.${c.model}.${c.fmt}`;
+const runKey = (c) => JSON.stringify([c.model, c.fmt, c.A, c.B, c.C, c.N, c.Tprime, c.maxNewTokens]);
+const RUNS = new Map();   // this visit's live runs, by their settings
+function syncGo() { $('#go').disabled = !($('#pa').value.trim() && $('#pb').value.trim()); $('#adv-sum').textContent = `${MODELS[pmodel()].label} · ${$('#n').value} samples`; }
 async function settingsChanged() {
   syncGo();
   const c = readConfig(), p = cachedFor(c);
-  if (p) { if (S.poolKey !== poolKey(p)) await load(poolKey(p)); stageMsg(null); return; }
+  if (p) {
+    const k = poolKey(p, c);
+    if (S.poolKey === k || await load(k)) { stageMsg(null); return; }
+  }
+  if (RUNS.has(runKey(c))) { show(RUNS.get(runKey(c)), runKey(c), 'Your run'); stageMsg(null); return; }
   if (S.pool) setStatus('The plot is from earlier prompts or settings. Press ↑.');
 }
-function run() {
+
+// ---------------------------------------------------------------- running on Modal
+// As on the diversity demo (docs/run-flow.md): nothing runs, signs in or switches without a click that says so;
+// every failure says what happened and offers the next step.
+const signInBtn = () => '<button type="button" class="btn" data-act="signin">Sign in with Hugging Face</button>';
+let abort = null;
+async function run() {
   const c = readConfig();
-  if (!c.A || !c.B) return;
+  if (!c.A || !c.B || abort) return;
   const p = cachedFor(c);
-  if (p) { load(poolKey(p)); stageMsg(null); return; }
-  const near = S.presets.find((x) => x[pfmt()].A === c.A && x[pfmt()].B === c.B);
-  stageMsg(near
-    ? { title: 'No completions for these settings yet.',
-        detail: `This prototype has completions for the example pairs at N ${DEFAULTS.N}, T′ ${DEFAULTS.Tprime.toFixed(1)} and ${DEFAULTS.maxNewTokens} tokens only.`,
-        actions: '<button type="button" class="btn" data-act="reset">Use those settings</button>' }
-    : { title: 'Live runs aren’t connected yet.',
-        detail: 'This prototype only has completions for the example pairs. Running your own prompts needs the ensemble route on Modal, which is not live yet.',
-        actions: '<button type="button" class="btn" data-act="example">Use an example</button>' });
+  if (p && (S.poolKey === poolKey(p, c) || await load(poolKey(p, c)))) { stageMsg(null); return; }
+  if (RUNS.has(runKey(c))) { show(RUNS.get(runKey(c)), runKey(c), 'Your run'); stageMsg(null); return; }
+  const auth = getAuth();
+  if (!auth) {
+    stageMsg({ title: 'Running new prompts needs a free Hugging Face account.',
+      detail: 'Runs use the demo’s GPU on Modal. You will be sent to Hugging Face to sign in, then back here, where the run starts.',
+      actions: signInBtn() });
+    return;
+  }
+  abort = new AbortController();
+  const t0 = performance.now(), secs = () => Math.round((performance.now() - t0) / 1000);
+  const running = () => stageMsg({ running: true, title: `Sampling ${c.N} completions… ${secs()} s`,
+    detail: `${MODELS[c.model].label} on Modal.${secs() >= 60 ? ' The first run starts a GPU, which can take a minute or two.' : ''}`,
+    actions: '<button type="button" class="btn" data-act="stop">Stop</button>' });
+  running();
+  const tick = setInterval(running, 1000);
+  $('#go').disabled = true;
+  try {
+    const r = await fetch(`${MODAL_URL}/ensemble_sample`, {
+      method: 'POST', signal: abort.signal,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
+      body: JSON.stringify({ model: c.model, format: c.fmt, prompts: { A: c.A, B: c.B, ...(c.C ? { C: c.C } : {}) },
+        n: c.N, t_prime: c.Tprime, max_new_tokens: c.maxNewTokens }),
+    });
+    const out = await r.json().catch(() => null);
+    if (!r.ok || !out?.samples) throw Object.assign(new Error(out?.detail || ''), { code: out?.code || (r.ok ? 'bad_answer' : 'server') });
+    RUNS.set(runKey(c), out);
+    if (runKey(readConfig()) === runKey(c)) { stageMsg(null); show(out, runKey(c), `Sampled in ${secs()} s`); }
+    else { stageMsg(null); setStatus('Done, but for earlier settings. Set them back to see it.'); }
+  } catch (e) {
+    if (e.name === 'AbortError') { stageMsg(null); setStatus('Stopped.'); }
+    else failed(e);
+  } finally {
+    clearInterval(tick); abort = null; syncGo();
+  }
+}
+function failed(e) {
+  const code = e.code || 'unreachable';
+  const why = {
+    auth: ['Your Hugging Face sign-in has expired.', 'Sign in again to run.', signInBtn()],
+    rate_limit: ['You have used today’s runs.', esc(e.message) || 'Please come back tomorrow.', ''],
+    budget: ['This month’s GPU budget for the demo is used up.', 'The example pairs still work.', '<button type="button" class="btn" data-act="example">Use an example</button>'],
+    bad_request: ['The server could not run these settings.', esc(e.message), ''],
+    unreachable: ['The GPU on Modal could not be reached.', 'Check your connection and try again.', '<button type="button" class="btn" data-act="retry">Try again</button>'],
+  }[code] ?? ['Something went wrong on the server.', esc(e.message), '<button type="button" class="btn" data-act="retry">Try again</button>'];
+  if (code === 'auth') signOut();
+  stageMsg({ title: why[0], detail: why[1], actions: why[2] });
 }
 function stageMsg(m) {
   const el = $('#stage-msg');
   if (!m) { el.hidden = true; el.innerHTML = ''; return; }
-  el.className = 'stage-msg error';
-  el.innerHTML = `<p class="t">${m.title}</p><p class="d">${m.detail}</p><div class="a">${m.actions}${S.pool ? '<button type="button" class="btn" data-act="dismiss">Dismiss</button>' : ''}</div>`;
+  el.className = 'stage-msg' + (m.running ? '' : ' error');
+  el.innerHTML = `${m.running ? '<div class="spinner"></div>' : ''}<p class="t">${m.title}</p><p class="d">${m.detail}</p><div class="a">${m.actions}${S.pool && !m.running ? '<button type="button" class="btn" data-act="dismiss">Dismiss</button>' : ''}</div>`;
   el.hidden = false;
   el.querySelectorAll('[data-act]').forEach((b) => (b.onclick = () => {
     const a = b.dataset.act;
     if (a === 'dismiss') stageMsg(null);
+    if (a === 'stop') abort?.abort();
+    if (a === 'retry') { stageMsg(null); run(); }
+    if (a === 'signin') signIn({ cfg: readConfig() }).catch(() => stageMsg({ title: 'The Hugging Face sign-in could not be loaded.', detail: 'Check your connection and try again.', actions: signInBtn() }));
     if (a === 'example') { stageMsg(null); setTimeout(() => { $('#exmenu').open = true; }); }   // after this click's close-menus pass
-    if (a === 'reset') { $('#n').value = DEFAULTS.N; $('#tp').value = DEFAULTS.Tprime.toFixed(1); $('#maxtok').value = DEFAULTS.maxNewTokens; settingsChanged(); }
   }));
 }
 function setStatus(t) { $('#status').textContent = t; }
 
+// A cached pool, or false when there is none (not drawn yet for this model and format: ↑ runs it).
 async function load(key) {
   const r = await fetch(DATA + key + '.json').catch(() => null);
-  if (!r || !r.ok) { stageMsg({ title: 'These completions could not be loaded.', detail: 'Reload the page to try again.', actions: '' }); return; }
-  const pool = await r.json();
+  if (r && r.status === 404) return false;
+  if (!r || !r.ok) { stageMsg({ title: 'These completions could not be loaded.', detail: 'Check your connection and reload the page.', actions: '' }); return true; }
+  show(await r.json(), key, 'Cached');
+  return true;
+}
+function show(pool, key, how) {
   S.pool = pool; S.poolKey = key;
-  setStatus(`${pool.standIn ? 'Stand-in data' : 'Cached'}: ${pool.N} completions from ${pool.model.split('/').pop()}, drawn on ${pool.standIn ? 'a CPU' : 'Modal'}.`);
+  setStatus(`${how}: ${pool.N} completions from ${pool.model.split('/').pop()}${pool.standIn ? ' (stand-in, on a CPU)' : ', drawn on Modal'}.`);
   // One group per distinct string; copies share every score.
   const byText = new Map();
   pool.samples.forEach((s, i) => { const g = byText.get(s.text); if (g) g.idx.push(i); else byText.set(s.text, { i, idx: [i] }); });
@@ -335,6 +418,7 @@ function wire() {
     cancelAnimationFrame(raf); raf = requestAnimationFrame(update);
   };
   $('#fmt').onchange = setFormat;
+  $('#model').onchange = () => { syncModel(); settingsChanged(); };
   ['#pa', '#pb', '#pc', '#n', '#tp', '#maxtok'].forEach((id) => $(id).addEventListener('input', () => { clearTimeout(S.ct); S.ct = setTimeout(settingsChanged, 250); }));
   ['#pa', '#pb'].forEach((id) => $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); run(); } }));
   $('#go').onclick = run;
@@ -380,7 +464,9 @@ const ENSEMBLE_EXPLAIN = {
   },
   model: {
     title: 'The model',
-    body: `<p>Qwen3 14B with 4-bit (AWQ) weights, the same weights as the diversity demo, run on Modal's GPU. It is a chat model, but like any language model it gives a probability to every continuation of any text, so it can be used either way: see <b>Prompt format</b>.</p>`,
+    body: `<p><b>Qwen3 14B</b> with 4-bit (AWQ) weights, the same weights as the diversity demo. It is a chat model, but like any language model it gives a probability to every continuation of any text, so it can be used either way: see <b>Prompt format</b>.</p>
+      <p><b>GPT-2</b> (124M parameters), the model of the paper's Fig. 1. It only continues text: it has no chat template.</p>
+      <p>Both run on the demo's GPUs on Modal. Running new prompts needs a free Hugging Face account; the example pairs are cached and need nothing.</p>`,
   },
   format: {
     title: 'Prompt format',

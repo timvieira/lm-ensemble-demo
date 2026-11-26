@@ -110,6 +110,9 @@
   .stage-msg .d { font-size: 13.5px; color: var(--text-2); line-height: 1.45; }
   .stage-msg .a { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
   .stage-msg.error { box-shadow: inset 0 3px 0 var(--accent); }
+  .stage-msg:not(.error) .t { color: var(--text); }
+  .spinner { width: 26px; height: 26px; border-radius: 50%; border: 3px solid var(--border); border-top-color: var(--accent); animation: spin .9s linear infinite; margin-bottom: 4px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   .btn { font: 14px var(--sans); color: var(--text-2); background: transparent; border: 1px solid #ddd; border-radius: 4px; padding: 6px 14px; cursor: pointer; }
   .btn:hover { background: rgba(0,0,0,.04); color: var(--text); }
   .viewmenu { position: absolute; right: 18px; bottom: 14px; z-index: 20; }
@@ -184,7 +187,7 @@
         <details class="chipmenu" id="adv">
           <summary class="chip" aria-label="Settings"><span id="adv-sum">Qwen3 14B · 200 samples</span></summary>
           <div class="menu">
-            <label class="field wide"><span class="lab">Model<button type="button" class="xbtn" data-x="model" aria-label="About the model">?</button></span><select id="model"><option value="qwen3-14b">Qwen3 14B, 4-bit (AWQ) · Modal</option></select></label>
+            <label class="field wide"><span class="lab">Model<button type="button" class="xbtn" data-x="model" aria-label="About the model">?</button></span><select id="model"><option value="qwen3-14b" selected>Qwen3 14B, 4-bit (AWQ) · Modal</option><option value="gpt2">GPT-2 (124M) · Modal</option></select></label>
             <label class="field wide"><span class="lab">Prompt format<button type="button" class="xbtn" data-x="format" aria-label="What is the prompt format?">?</button></span><select id="fmt"><option value="text" selected>Continue text (as in the paper)</option><option value="chat">Chat (messages and replies)</option></select></label>
             <label class="field wide"><span class="lab">Drawn from<button type="button" class="xbtn" data-x="proposal" aria-label="How are the completions drawn?">?</button></span><select id="proposal"><option value="local_product">the token-level product of A and B</option></select></label>
             <label class="field"><span class="lab">Samples N<button type="button" class="xbtn" data-x="N" aria-label="What is N?">?</button></span><input id="n" type="number" min="2" max="200" step="10" value="200"></label>
