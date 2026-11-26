@@ -214,6 +214,35 @@ error codes) and its three backends (GPU server, Modal, the HF Space). New route
   (it needs new draws), comparing ESS and ρ with C as M grows. It is also where τ must be fixed before
   drawing, so a run is per τ. **Open:** whether this belongs in v1.
 
+**Decided (Tim, 26 Nov):** the prototype uses Qwen3 14B, the model the GPU server already serves
+(`Qwen/Qwen3-14B-AWQ`). Development starts from cached pools for the presets
+(`data/ensemble/presets.json`).
+
+**What the GPU server can do today** (checked against its `/status`, contract version 1, 26 Nov):
+
+- It can: `/sample` draws completions from **one** prompt, with each completion's exact log p under
+  that prompt; `/embed`; the draw cache; `describe`.
+- It cannot (no route for either):
+  - **score text under another prompt**, so there is no ℓ_B for a completion drawn from A, and no ℓ_C;
+  - **draw from the token-level product** of two prompts, or give the local scores. Both need the two
+    prompts' full next-token distributions at every step, in lockstep.
+
+**The plan:**
+
+1. **Ask Manuel for `/score` first** (prompts and texts in; the log-probabilities of each text under
+   each prompt out). In vLLM this is teacher forcing with prompt log-probabilities, a small route.
+   - With only this, the global ensemble works at every τ. Draw N/2 completions from A and N/2 from B
+     with today's `/sample`, then score all N under A, B and C.
+   - The proposal is the 50/50 mixture, r(y) = ½ p_A(y) + ½ p_B(y). That is exact from those scores
+     (for i.i.d. draws at T′ = 1), so the importance weights and the effective sample size are exact.
+2. **Then ask for the product sampler with local scores** (`/ensemble_sample` above). That gives the
+   paper's Fig. 1 proposal and the global-vs-local comparison. Until it exists, the Scored: local switch
+   is off.
+3. **Meanwhile, stand-in data.** `scripts/ensemble_pool.py` computes the full record (product sampler,
+   local and global scores, ℓ_C) with Hugging Face transformers. It is run here on Qwen3-0.6B on CPU, the
+   same tokenizer as 14B. These pools are marked as stand-ins and are replaced by 14B pools once the
+   routes exist. The script doubles as a reference for exactly what the server should compute.
+
 Byte-level ensembling of models with different tokenisers (paper §5, §E) is out of scope for v1. A
 cross-model pair is a natural v2 ("Llama × Qwen"), and would need the byte-level machinery on the
 server.
