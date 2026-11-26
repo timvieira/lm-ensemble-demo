@@ -9,7 +9,7 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
 - **Hugging Face sign-in fails here until the OAuth app knows this address.** The page asks Hugging Face to send
   the visitor back to its own address (js/hfauth.js: `location.origin + location.pathname`), so
   https://timvieira.github.io/lm-ensemble-demo/ must be a redirect URI of the OAuth app (client 43d09d55-…,
-  huggingface.co/settings/applications). Live runs need sign-in, so they fail here too until then.
+  huggingface.co/settings/connected-applications, Developer Applications, "Diverse sampling demo", Settings). Live runs need sign-in, so they fail here too until then.
   Checked 26 Nov by asking Hugging Face's authorize endpoint for each address (no sign-in needed): dpp-lm-demo/ is
   registered; lm-ensemble-demo/ is refused ("Invalid redirect_uri, must be one of the registered redirect_uris for
   this client_id"), and so was the old address, dpp-lm-demo/lab/ensemble.html: sign-in on this page has never worked,
@@ -204,6 +204,6 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   text only). The page offers both in the settings and runs anything not cached; pools are
   data/ensemble/<pair>.<model>.<format>.json, drawn for both models by the "Ensemble prototype pools" workflow.
 - Check: Hugging Face sign-in from the lab page redirects back to lab/ensemble.html; if the OAuth app does not
-  list that address as a redirect URL, add it (huggingface.co/settings/applications). The token is shared with
+  list that address as a redirect URL, add it (huggingface.co/settings/connected-applications, Developer Applications, "Diverse sampling demo", Settings). The token is shared with
   the main page (same origin), so signing in there works too.
 

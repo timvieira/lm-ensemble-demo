@@ -2,7 +2,8 @@
 // The access token stays in this browser and is only sent to the Space, so ZeroGPU charges
 // the visitor's own daily GPU quota instead of the tiny anonymous one.
 
-// Client ID of the OAuth app (public by design; see huggingface.co/settings/applications).
+// Client ID of the OAuth app (public by design): "Diverse sampling demo", shared with dpp-lm-demo; its redirect URLs
+// are under huggingface.co/settings/connected-applications, Developer Applications, Settings.
 export const HF_CLIENT_ID = '43d09d55-ee33-4a6f-8447-4731a6da25b9';
 const SCOPES = 'openid profile';
 const KEY = 'dpp-lm-hf-auth';
