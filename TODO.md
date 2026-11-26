@@ -108,12 +108,8 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
 - On Tim's laptop the `gh` token has no `workflow` scope, so pushes that touch .github/workflows go over SSH
   (or after `gh auth refresh -s workflow`).
 
-### In progress (26 Nov)
-- When it has settled: send Robin Chan the link on Zulip (Tim). Not sent yet: Tim chose to fix the Hugging Face
-  sign-in first (the redirect URI, above). The text is approved (26 Nov); it goes as a direct message to Robin
-  (Zulip user 253) through the Zulip API with ~/zuliprc on Tim's laptop.
-
 ### Done (26 Nov)
+- **Robin Chan has the link** (Tim messaged him himself, 26 Nov).
 - **A local clone** at ~/projects/lm-ensemble-demo on Tim's laptop (Tim, 26 Nov).
 - **The diversity demo's full-page layout** (Tim): on wide screens the plot is the page. The title and the controls
   float top left, the ranked rail runs down the right, the readouts (Uses n of N, log Ẑ) and View sit in a bar along
