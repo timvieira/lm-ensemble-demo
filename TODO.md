@@ -79,14 +79,10 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   dpp-lm-demo e54c873 (they need Hugging Face sign-in; see the first item).
 
 ### Open: the Hugging Face Space backend (26 Nov)
-- **Needs Tim: rename the Space to lm-ensemble-demo** (Tim, 26 Nov: "Call lm-ensemble-demo"). It was created as
-  xtimv/LM-ensemble-demo; Hugging Face already redirects the lowercase name to it, and its address
-  (xtimv-lm-ensemble-demo.hf.space, the page's SPACE_URL) is lowercase either way. The repository now uses
-  xtimv/lm-ensemble-demo everywhere; the deploy may need the rename first (not tested: whether the upload follows the
-  redirect).
+- **Done: the Space is xtimv/lm-ensemble-demo** (Tim renamed it, 26 Nov; it was created as xtimv/LM-ensemble-demo,
+  which now redirects). Its address, xtimv-lm-ensemble-demo.hf.space (the page's SPACE_URL), did not change.
 - **Done: the deploy token** (26 Nov). The repository secret HF_TOKEN is set (Tim); the first deploy uploaded space/ to
-  the Space (its commit b7bb356). The upload followed Hugging Face's redirect from xtimv/lm-ensemble-demo, so it works
-  before the rename too.
+  the Space (its commit b7bb356). (Before the rename, the upload followed Hugging Face's redirect from the lowercase name.)
 - **Tested on ZeroGPU** (26 Nov, through the page's own client, scripts/space-check.mjs, on Tim's quota): the Space built
   and ran on zero-a10g in about 3 minutes; it offers Qwen3 14B (the unpacked AWQ weights) and GPT-2; Gradio 6.32's
   queue protocol works with js/space.js. Pools: GPT-2 text n = 4; Qwen3 14B text n = 8, chat n = 4, and text n = 200 at
