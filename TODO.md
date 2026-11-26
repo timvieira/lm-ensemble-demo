@@ -31,9 +31,6 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   modal/ensemble_lib.py (at 099e77e): two copies to keep the same.
 - **The unused copies in dpp-lm-demo.** Decided (Tim, 26 Nov): lab/ensemble*.js, data/ensemble/,
   tests/ensemble.test.mjs and docs/handoff-ensemble-demo.md stay there. They will drift from the copies here.
-- **Maths typesetting.** The page typesets its explainers with KaTeX and writes symbols in labels, axes and cards as
-  Unicode (τ, Ẑ, log p(· | …)). Tim's global rule asks for MathJax (SVG) for every symbol in every page; the
-  handoff (B4, A8) says KaTeX. Does the rule apply to the demos?
 - **What "product" means at τ = 0.** The page's product is the weighted geometric mean √(p_A p_B) (weights ½; the
   τ explainer says so), normalised. Whether the paper's Fig. 1 uses that or p_A·p_B has not been checked against
   the paper. Rankings and ρ are the same either way; "ensemble %", log Ẑ and "Uses n of N" are not.
@@ -67,13 +64,9 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   the τ explainer says the product is "the paper's main ensemble" and that each τ is the distribution closest to
   both prompts under an α-divergence with α = 1 − τ; the explicit-prompt explainer quotes the paper's ρ = 0.96
   (global) and ρ = 0.09 (local). Check each against the paper's PDF (the conference version).
-- **Zoomed out, the plot shows impossible values.** The zoom goes down to 0.2× as on the diversity demo, but here that
-  shows log p up to +40 (Tim's phone, 26 Nov), where no completion can be. Open: stop zooming out at the first view (1×)?
 - **On a phone the labels drift far from their dots** (Tim's screenshot, 26 Nov: "Albert Einstein." about 50 px from
   its point): on a narrow frame most labels sit left of their dots and are pushed down one by one. Same cause as the
   crowding item above.
-- **The banner is stale:** "only the example pairs have completions so far", but live runs exist since
-  dpp-lm-demo e54c873 (they need Hugging Face sign-in; see the first item).
 
 ### Open: the Hugging Face Space backend (26 Nov)
 - **Done: the Space is xtimv/lm-ensemble-demo** (Tim renamed it, 26 Nov; it was created as xtimv/LM-ensemble-demo,
@@ -109,6 +102,17 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   (or after `gh auth refresh -s workflow`).
 
 ### Done (26 Nov)
+- **MathJax for every symbol** (Tim, 26 Nov: "use mathjax"; his global rule). MathJax 3.2.2, SVG output
+  (tex-svg-full, fontCache local) replaces KaTeX. The page's own text is typeset at start-up, explainers when they open
+  (js/explain.js), and the text the page builds (cards, readouts, the τ readout, tooltip, ρ line) gets cached
+  tex2svg markup; the axis labels inside both plots' SVG are tex2svg SVGs sized from their ex units and set on the
+  baseline. The explainers' Unicode τ, α, T′, Ẑ, N are TeX now, and y_{<t} is escaped (it was swallowed as an HTML tag).
+  Checked in headless Chrome at 1600 × 1000 and 390 × 844: no \( \[ $ left in the rendered text, no MathJax errors,
+  all 16 explainers clean. If MathJax does not load, the page says so. Not maths: native hover titles and the
+  backends' error messages (e.g. "Allowed: 2 ≤ n ≤ 200"), shown as sent.
+- **Stale text fixed:** the banner now says "Work in progress. This demo is still being built." (it said only the
+  example pairs had completions); the sign-in message names the Space when "Runs on" is the Space (it always said
+  Modal); code comments name both backends.
 - **Robin Chan has the link** (Tim messaged him himself, 26 Nov).
 - **A local clone** at ~/projects/lm-ensemble-demo on Tim's laptop (Tim, 26 Nov).
 - **The diversity demo's full-page layout** (Tim): on wide screens the plot is the page. The title and the controls
@@ -157,13 +161,13 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   dpp-lm-demo's copy (lab/ensemble.js) still has the bug.
 
 ## Prototype: the ensemble demo (prompt intersection, arXiv:2603.05432 Fig. 1)
-- Brief: docs/handoff-ensemble-demo.md. Built here as an unlinked lab page (lab/ensemble.html), to move
-  to its own repository once it works.
+- Brief: docs/handoff-ensemble-demo.md. Built as an unlinked lab page of dpp-lm-demo (lab/ensemble.html); moved to
+  this repository on 26 Nov.
 - Decided (Tim): Qwen3 14B (the GPU server's model); cached pools for the presets during development
   (data/ensemble/presets.json).
-- Waiting on Manuel: `/score` (texts scored under given prompts) first; the token-level product sampler
-  with local scores second. Today's server has neither (checked 26 Nov). With `/score` alone, a 50/50
-  mixture of A and B draws gives the global ensemble exactly; local scores wait for the sampler.
+- No longer waiting on Manuel (was: `/score` and a token-level product sampler on his GPU server, which had neither on
+  26 Nov): the pools and live runs come from Modal and the Hugging Face Space, which both sample the token-level
+  product and score under A, B and C.
 - Done (26 Nov): Qwen3 14B pools for the five presets, drawn on Modal (modal/ensemble_lib.py through the manual
   "Ensemble prototype pools" workflow; about 15 s of GPU per preset). The token-level product sampler and local
   scores run there, so the GPU server's missing routes no longer block the prototype. Physicist × author
@@ -204,7 +208,6 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   container; text and chat formats) and GPT-2 (124M, its own T4 container, charged to the meter at T4 prices;
   text only). The page offers both in the settings and runs anything not cached; pools are
   data/ensemble/<pair>.<model>.<format>.json, drawn for both models by the "Ensemble prototype pools" workflow.
-- Check: Hugging Face sign-in from the lab page redirects back to lab/ensemble.html; if the OAuth app does not
-  list that address as a redirect URL, add it (huggingface.co/settings/connected-applications, Developer Applications, "Diverse sampling demo", Settings). The token is shared with
-  the main page (same origin), so signing in there works too.
+- Done differently: the lab page moved here, and sign-in works from https://timvieira.github.io/lm-ensemble-demo/ (see
+  "Open after the move"). The sign-in is shared with the diversity demo (same site).
 

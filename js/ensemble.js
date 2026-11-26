@@ -1,6 +1,7 @@
 // Prompt intersection: a prototype for "Ensembling Language Models with SMC" (arXiv:2603.05432, Fig. 1).
-// Brief: docs/handoff-ensemble-demo.md. Cached pools: data/<pair>.<model>.<format>.json; live runs: the
-// dpp-lm-demo Modal app's /ensemble_sample (modal/app.py there), both made by modal/ensemble_lib.py there.
+// Brief: docs/handoff-ensemble-demo.md. Cached pools: data/<pair>.<model>.<format>.json. Live runs: the dpp-lm-demo
+// Modal app's /ensemble_sample (modal/app.py there) or the Hugging Face Space (space/app.py here, called by
+// js/space.js); all made by the same pool code (ensemble_lib.py, one copy in each repository).
 import * as d3 from 'd3';
 import { logGenMean, tauOf, uOf, tauName, NAMED, summarize, spearman } from './ensemble-math.js';
 import { EXPLAIN, initExplainers } from './explain.js';
@@ -13,6 +14,38 @@ const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmt = (x, d = 1) => (Number.isFinite(x) ? x.toFixed(d) : String(x));
 const xb = (k) => `<button type="button" class="xbtn" data-x="${k}" aria-label="Explain">?</button>`;
+// Maths, by MathJax (SVG output; loaded and configured in index.html), after MathJax.startup.promise (init). Text the
+// page builds gets SVG markup from tex(), cached by TeX source; labels inside the plots' SVG come from svgMath().
+const TEX = new Map();
+function tex(src) {
+  if (!TEX.has(src)) TEX.set(src, window.MathJax.tex2svg(src, { display: false }).outerHTML);
+  return TEX.get(src);
+}
+// A TeX label inside an SVG chart: MathJax's <svg>, sized from its ex units (an ex is half the font size, MathJax's
+// own default), its baseline at y, its left edge at x. Returns the element; its width in px is its width attribute.
+function svgMath(g, src, x, y, size = 12) {
+  const out = window.MathJax.tex2svg(src, { display: false }).querySelector('svg');
+  const ex = size / 2, num = (v) => parseFloat(v) || 0;
+  const w = num(out.getAttribute('width')) * ex, h = num(out.getAttribute('height')) * ex;
+  const depth = -num(out.style.verticalAlign) * ex;
+  out.removeAttribute('style');
+  for (const [k, v] of Object.entries({ width: w, height: h, x, y: y - h + depth, class: 'math-lab' })) out.setAttribute(k, v);
+  g.node().appendChild(out);
+  return out;
+}
+// An axis label: maths, then plain text, centred on cx with its baseline at y, in the group g (which may be rotated).
+function axisLabel(g, src, text, cx, y) {
+  const m = svgMath(g, src, 0, y), mw = +m.getAttribute('width');
+  const t = g.append('text').attr('class', 'axis-lab').attr('y', y).text(text);
+  const x0 = cx - (mw + (text ? t.node().getComputedTextLength() : 0)) / 2;
+  m.setAttribute('x', x0);
+  t.attr('x', x0 + mw);
+}
+// MathJax must be ready before anything with maths is drawn. If its script did not load, the page says so.
+async function mathReady() {
+  if (!window.MathJax?.startup?.promise) throw new Error('The maths renderer (MathJax) did not load. Check your connection and reload the page.');
+  await window.MathJax.startup.promise;
+}
 // A completion can be empty: the text ends right after the prompt (a new line or a special token comes first).
 const EMPTY = '(nothing: it ends right away)';
 const shown = (s) => (s.text.trim() ? esc(s.text.trim()) : `<i class="empty-txt">${EMPTY}</i>`);
@@ -26,7 +59,9 @@ async function init() {
     Object.assign(EXPLAIN, ENSEMBLE_EXPLAIN);
     initExplainers();
     trackLayout();
+    const math = mathReady();
     S.presets = await (await fetch(DATA + 'presets.json')).json();
+    await math;
     wire();
     syncModel();
     fill(S.presets[0]);
@@ -36,6 +71,9 @@ async function init() {
     await settingsChanged();
     if (back?.auth && back.stash?.cfg) run();
     else if (back?.error) stageMsg({ title: 'Signing in was cancelled.', detail: esc(back.error), actions: signInBtn() });
+  } catch (e) {
+    console.error(e);
+    stageMsg({ title: 'The page could not start.', detail: esc(String(e?.message ?? e)), actions: '' });
   } finally {
     // The page stays hidden (html.booting) until its first complete render; it is shown even if that failed.
     requestAnimationFrame(() => document.documentElement.classList.remove('booting'));
@@ -138,7 +176,7 @@ async function settingsChanged() {
   if (S.pool) setStatus('The plot is from earlier prompts or settings. Press ↑.');
 }
 
-// ---------------------------------------------------------------- running on Modal
+// ---------------------------------------------------------------- running on Modal or the Hugging Face Space
 // As on the diversity demo (docs/run-flow.md): nothing runs, signs in or switches without a click that says so;
 // every failure says what happened and offers the next step.
 const signInBtn = () => '<button type="button" class="btn" data-act="signin">Sign in with Hugging Face</button>';
@@ -152,7 +190,7 @@ async function run() {
   const auth = getAuth();
   if (!auth) {
     stageMsg({ title: 'Running new prompts needs a free Hugging Face account.',
-      detail: 'Runs use the demo’s GPU on Modal. You will be sent to Hugging Face to sign in, then back here, where the run starts.',
+      detail: `${c.backend === 'space' ? 'Runs on the Hugging Face Space use your own Hugging Face GPU quota.' : 'Runs use the demo’s GPU on Modal.'} You will be sent to Hugging Face to sign in, then back here, where the run starts.`,
       actions: signInBtn() });
     return;
   }
@@ -257,7 +295,7 @@ function update() {
   if (!S.pool) return;
   const P = S.pool, T = tau(), name = tauName(T);
   document.querySelectorAll('#ticks span').forEach((t) => t.classList.toggle('on', S.score === 'global' && Math.abs(+t.dataset.u - S.u) < 1e-9));
-  $('#tau-out').textContent = S.score === 'local' ? 'local product' : `${name ?? 'τ = ' + fmt(T, 2)}${name && Number.isFinite(T) ? ` (τ = ${T})` : ''}`;
+  $('#tau-out').innerHTML = S.score === 'local' ? 'local product' : `${name ?? tex(`\\tau = ${fmt(T, 2)}`)}${name && Number.isFinite(T) ? ` (${tex(`\\tau = ${T}`)})` : ''}`;
   const score = P.samples.map(scoreOf);
   const logv = P.samples.map((s, i) => score[i] - s.logr);    // importance weights: target / proposal
   const sum = summarize(logv);
@@ -276,10 +314,10 @@ function update() {
 
 function readouts(score) {
   const P = S.pool, N = P.N, distinct = S.groups.length;
-  $('#sel-sub').textContent = `${N} completions, ${distinct} distinct · ${S.score === 'local' ? 'local scores' : 'scored at ' + (tauName(tau()) ?? 'τ = ' + fmt(tau(), 2))}`;
+  $('#sel-sub').innerHTML = `${N} completions, ${distinct} distinct · ${S.score === 'local' ? 'local scores' : 'scored at ' + (tauName(tau()) ?? tex(`\\tau = ${fmt(tau(), 2)}`))}`;
   const rows = [
     [`Uses${xb('ess')}`, `${fmt(S.sum.ess, 1)} of ${N} completions`],
-    [`log Ẑ${xb('logZ')}`, fmt(S.sum.logZ, 2)],
+    [`${tex('\\log \\hat Z')}${xb('logZ')}`, fmt(S.sum.logZ, 2)],
   ];
   $('#readout').innerHTML = rows.map(([k, v]) => `<span class="stat"><span>${k}</span><span class="v">${v}</span></span>`).join('');
   // The gestures, as on the diversity demo's bar.
@@ -294,7 +332,7 @@ function cards(rank, gProb) {
     const G = S.groups[g], s = P.samples[G.i];
     return `<li class="card${S.open.has(G.i) ? ' open' : ''}" data-i="${G.i}">
       <div class="txt">${shown(s)}${s.ended ? '' : ' …'}</div>
-      <div class="meta"><span class="rank">${r + 1}.</span>${top.has(G.i) ? '<span class="dot"></span>' : ''}${G.idx.length > 1 ? `<span class="f">×${G.idx.length}</span>` : ''}<span class="f">log p<sub>A</sub> ${fmt(s.logpA)}</span><span class="f">log p<sub>B</sub> ${fmt(s.logpB)}</span><span class="f">ensemble ${pctOf(gProb[g])}${xb('prob')}</span>${s.ended ? '' : `<span class="cutoff">cut off at ${s.nTokens} tokens</span>`}</div></li>`;
+      <div class="meta"><span class="rank">${r + 1}.</span>${top.has(G.i) ? '<span class="dot"></span>' : ''}${G.idx.length > 1 ? `<span class="f">×${G.idx.length}</span>` : ''}<span class="f">${tex('\\log p_A')} ${fmt(s.logpA)}</span><span class="f">${tex('\\log p_B')} ${fmt(s.logpB)}</span><span class="f">ensemble ${pctOf(gProb[g])}${xb('prob')}</span>${s.ended ? '' : `<span class="cutoff">cut off at ${s.nTokens} tokens</span>`}</div></li>`;
   }).join('');
   const more = $('#more');
   more.hidden = rank.length <= SHOWN;
@@ -412,10 +450,9 @@ const plot = {
       ax.append('line').attr('class', 'axis-arrow').attr('x1', m.l).attr('y1', H - m.b).attr('x2', W - m.r + 18).attr('y2', H - m.b).attr('marker-end', 'url(#axis-arrowhead)');
       ax.append('line').attr('class', 'axis-arrow').attr('x1', m.l).attr('y1', H - m.b).attr('x2', m.l).attr('y2', m.t - 18).attr('marker-end', 'url(#axis-arrowhead)');
     }
-    ax.append('text').attr('class', 'axis-lab').attr('x', (m.l + W - m.r) / 2).attr('y', H - m.b + 38).attr('text-anchor', 'middle')
-      .text(`log p( · | “${S.pool.prompts.A}”)`);
-    ax.append('text').attr('class', 'axis-lab').attr('transform', `translate(${m.l - 42},${(m.t + H - m.b) / 2}) rotate(-90)`).attr('text-anchor', 'middle')
-      .text(`log p( · | “${S.pool.prompts.B}”)`);
+    axisLabel(ax, '\\log p_A(y)', `   “${S.pool.prompts.A}”`, (m.l + W - m.r) / 2, H - m.b + 38);
+    axisLabel(ax.append('g').attr('transform', `translate(${m.l - 42},${(m.t + H - m.b) / 2}) rotate(-90)`),
+      '\\log p_B(y)', `   “${S.pool.prompts.B}”`, 0, 0);
   },
   grid() {
     // Soft grid over the plane, a line every 60 px or so; and the diagonal log p_A = log p_B, where every member of
@@ -493,7 +530,7 @@ function tip(i, ev) {
   const el = $('#tip');
   if (i < 0 || !S.pool) { el.hidden = true; return; }
   const s = S.pool.samples[i];
-  el.innerHTML = `${shown(s)}${s.ended ? '' : ' …'}<div class="m">log p_A ${fmt(s.logpA, 2)} · log p_B ${fmt(s.logpB, 2)}${s.logpC != null ? ` · log p_C ${fmt(s.logpC, 2)}` : ''} · local ${fmt(s.loglocal, 2)}</div>`;
+  el.innerHTML = `${shown(s)}${s.ended ? '' : ' …'}<div class="m">${tex('\\log p_A')} ${fmt(s.logpA, 2)} · ${tex('\\log p_B')} ${fmt(s.logpB, 2)}${s.logpC != null ? ` · ${tex('\\log p_C')} ${fmt(s.logpC, 2)}` : ''} · ${tex('\\log p_{\\mathrm{local}}')} ${fmt(s.loglocal, 2)}</div>`;
   el.hidden = false;
   const r = el.getBoundingClientRect();
   el.style.left = Math.min(ev.clientX + 14, innerWidth - r.width - 8) + 'px';
@@ -508,16 +545,15 @@ const valid = {
     if (!P.prompts.C || P.samples[0].logpC == null) { $('#valid-sub').textContent = 'No explicit prompt for this pair.'; return; }
     const glob = P.samples.map((s) => logGenMean([s.logpA, s.logpB], tau())), loc = P.samples.map((s) => s.loglocal), c = P.samples.map((s) => s.logpC);
     const rg = spearman(glob, c), rl = spearman(loc, c);
-    $('#valid-sub').innerHTML = `“${esc(P.prompts.C)}”. Rank correlation ρ = <b>${fmt(rg, 2)}</b> global${S.score === 'global' && tauName(tau()) ? ` (${tauName(tau())})` : ''}, <b>${fmt(rl, 2)}</b> local.`;
+    $('#valid-sub').innerHTML = `“${esc(P.prompts.C)}”. Rank correlation ${tex(`\\rho = ${fmt(rg, 2)}`)} global${S.score === 'global' && tauName(tau()) ? ` (${tauName(tau())})` : ''}, ${tex(`\\rho = ${fmt(rl, 2)}`)} local.`;
     const el = $('#valid'), W = el.clientWidth, H = el.clientHeight, m = { l: 40, r: 8, t: 6, b: 30 };
     const xs = S.score === 'local' ? loc : glob;
     const x = d3.scaleLinear().domain(d3.extent(xs)).nice().range([m.l, W - m.r]);
     const y = d3.scaleLinear().domain(d3.extent(c)).nice().range([H - m.b, m.t]);
     svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(4).tickSize(3));
     svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickSize(3));
-    svg.append('text').attr('class', 'axis-lab').attr('x', (m.l + W - m.r) / 2).attr('y', H - 2).attr('text-anchor', 'middle')
-      .text(S.score === 'local' ? 'local score' : 'global score (τ as set)');
-    svg.append('text').attr('class', 'axis-lab').attr('transform', `translate(10,${(m.t + H - m.b) / 2}) rotate(-90)`).attr('text-anchor', 'middle').text('log p_C');
+    axisLabel(svg, S.score === 'local' ? '\\log p_{\\mathrm{local}}(y)' : '\\log \\varphi_\\tau(y)', '', (m.l + W - m.r) / 2, H - 4);
+    axisLabel(svg.append('g').attr('transform', `translate(12,${(m.t + H - m.b) / 2}) rotate(-90)`), '\\log p_C(y)', '', 0, 0);
     const sel = new Set(S.sel);
     this.dots = svg.append('g').selectAll('circle').data(d3.range(P.N)).join('circle')
       .attr('cx', (i) => x(xs[i])).attr('cy', (i) => y(c[i])).attr('r', (i) => (sel.has(i) ? 3.6 : 2))
@@ -565,7 +601,7 @@ const ENSEMBLE_EXPLAIN = {
       <p>Combining the two is <b>ensembling</b> the model with itself.</p>`,
   },
   tau: {
-    title: 'τ: how the two prompts are combined',
+    title: '$\\tau$: how the two prompts are combined',
     body: `<p>Each completion's score combines its two probabilities with a generalised mean:
       $$\\varphi_\\tau(y) = \\Big(\\tfrac12\\, p_A(y)^\\tau + \\tfrac12\\, p_B(y)^\\tau\\Big)^{1/\\tau}.$$</p>
       <ul>
@@ -574,12 +610,12 @@ const ENSEMBLE_EXPLAIN = {
         <li><b>sum</b> ($\\tau = 1$): a mixture; either prompt liking it helps.</li>
         <li><b>max</b> ($\\tau = +\\infty$): good if either prompt likes it. Coverage.</li>
       </ul>
-      <p>Each value of $\\tau$ is the distribution closest to both prompts under one α-divergence ($\\alpha = 1 - \\tau$). The grey lines in the plot are where $\\varphi_\\tau$ is constant.</p>`,
+      <p>Each value of $\\tau$ is the distribution closest to both prompts under one $\\alpha$-divergence ($\\alpha = 1 - \\tau$). The grey lines in the plot are where $\\varphi_\\tau$ is constant.</p>`,
   },
   scored: {
     title: 'Global or local scores',
     body: `<p><b>Global</b> scores each whole string: $\\varphi_\\tau(y)$ from the two prompts' probabilities of the complete completion. This is the ensemble the paper targets.</p>
-      <p><b>Local</b> uses the token-level product: at every step, multiply the two prompts' next-token probabilities and renormalise. That is how ensembling is usually done, and it is not the same thing. It rewards tokens both prompts like one at a time, so generic openings (“a”, “the”) gain and specific answers can lose (the paper's Fig. 1: “a great guy.” rises, “Carl Sagan.” falls). The local score exists only for the product, so τ is off while it is on.</p>`,
+      <p><b>Local</b> uses the token-level product: at every step, multiply the two prompts' next-token probabilities and renormalise. That is how ensembling is usually done, and it is not the same thing. It rewards tokens both prompts like one at a time, so generic openings (“a”, “the”) gain and specific answers can lose (the paper's Fig. 1: “a great guy.” rises, “Carl Sagan.” falls). The local score exists only for the product, so $\\tau$ is off while it is on.</p>`,
   },
   proposal: {
     title: 'Where the completions come from',
@@ -604,8 +640,8 @@ const ENSEMBLE_EXPLAIN = {
       <p><b>Chat</b>: the prompts are messages to the model (“Name a famous physicist.”) in its chat template, with reasoning switched off, and each completion is its reply, ending where the model ends its turn.</p>
       <p>Same weights, two different distributions: a chat model continuing bare text often writes as if in a worksheet or a forum; asked in its template, it answers. In both, the scores are exact probabilities of the same reply under each prompt.</p>`,
   },
-  N: { title: 'Samples N', body: `<p>How many completions are drawn. The ranking and every readout are computed from these N; more completions represent the ensemble better.</p>` },
-  Tprime: { title: 'Sampling temperature T′', body: `<p>The temperature at which each token is drawn: $r(y_t \\mid y_{<t}) \\propto (p_A \\cdot p_B)^{1/T'}$. At $T' = 1$ the draws follow the token-level product exactly.</p>` },
+  N: { title: 'Samples $N$', body: `<p>How many completions are drawn. The ranking and every readout are computed from these N; more completions represent the ensemble better.</p>` },
+  Tprime: { title: "Sampling temperature $T'$", body: `<p>The temperature at which each token is drawn: $r(y_t \\mid y_{&lt;t}) \\propto (p_A \\cdot p_B)^{1/T'}$. At $T' = 1$ the draws follow the token-level product exactly.</p>` },
   maxtok: { title: 'Max tokens', body: `<p>A completion stops at the end of its first sentence, or after this many tokens. One that hits the limit is marked “cut off”.</p>` },
   stop: {
     title: 'One sentence',
@@ -635,18 +671,18 @@ const ENSEMBLE_EXPLAIN = {
     body: `<p>Each dot is a completion: across, its ensemble score (global at the current $\\tau$, or local); up, its log-probability after the explicit “A and B” prompt. $\\rho$ is Spearman's rank correlation: 1 means both put the completions in the same order.</p>`,
   },
   ess: {
-    title: 'Uses n of N completions',
+    title: 'Uses $n$ of $N$ completions',
     body: `<p>The effective sample size of the importance weights,
       $$\\mathrm{ESS} = \\frac{(\\sum_i w_i)^2}{\\sum_i w_i^2},$$
       between 1 and N. It says how many completions the estimate of $Z$ (and so every “ensemble %”) really rests on: when a few weights dominate, it is only as good as those few. The ranking itself does not depend on it.</p>`,
   },
   logZ: {
-    title: 'log Ẑ',
+    title: '$\\log \\hat Z$',
     body: `<p>The estimated normaliser of the ensemble, $\\hat Z = \\frac1N\\sum_i w_i$: an unbiased estimate of $Z = \\sum_y \\varphi_\\tau(y)$ over all strings. Small means the two prompts share little probability.</p>`,
   },
   prob: {
     title: 'Probability under the ensemble',
-    body: `<p>The completion's probability under the ensemble, $\\Phi(y) = \\varphi_\\tau(y)/Z$. The score $\\varphi_\\tau(y)$ is exact; the normaliser $Z$, a sum over all strings, is estimated from the N completions ($\\hat Z$, see log Ẑ). The list is ranked by $\\varphi_\\tau$, so the ranking is exact even when $\\hat Z$ is rough.</p>`,
+    body: `<p>The completion's probability under the ensemble, $\\Phi(y) = \\varphi_\\tau(y)/Z$. The score $\\varphi_\\tau(y)$ is exact; the normaliser $Z$, a sum over all strings, is estimated from the $N$ completions ($\\hat Z$, see $\\log \\hat Z$). The list is ranked by $\\varphi_\\tau$, so the ranking is exact even when $\\hat Z$ is rough.</p>`,
   },
 };
 

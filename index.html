@@ -8,9 +8,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..800;1,400..800&display=swap">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<script>
+  // Maths: MathJax 3 with SVG output. The page's own text is typeset at start-up; the explainers when they open;
+  // js/ensemble.js renders the rest with MathJax.tex2svg after MathJax.startup.promise, the plots' labels included.
+  window.MathJax = {
+    tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']] },
+    svg: { fontCache: 'local' },
+  };
+</script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg-full.js"></script>
 <script type="importmap">
 { "imports": { "d3": "https://cdn.jsdelivr.net/npm/d3@7.9.0/+esm" } }
 </script>
@@ -39,7 +45,7 @@
   .tau { display: grid; grid-template-columns: auto 260px auto; align-items: center; column-gap: 10px; }
   .tau .ends { grid-column: 2; display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: -2px; }
   .tau input[type=range] { width: 100%; accent-color: var(--ink); margin: 0; }
-  .tau output { font: 13px var(--mono); min-width: 7.5em; }
+  .tau output { font: 13px var(--sans); min-width: 7.5em; }
   .ticks { grid-column: 2; position: relative; height: 17px; font-size: 10px; color: var(--muted); --thumb: 16px; margin-top: -3px; }
   .ticks span { position: absolute; top: 0; padding-top: 6px; left: calc(var(--thumb) / 2 + var(--u) * (100% - var(--thumb))); transform: translateX(-50%); white-space: nowrap; cursor: pointer; }
   .ticks span::before { content: ""; position: absolute; top: 0; left: 50%; width: 1px; height: 5px; background: var(--text-2); opacity: .55; }
@@ -127,7 +133,8 @@
   .xpop { position: absolute; z-index: 100; background: #fff; color: var(--text); border: 1px solid var(--border); border-left: 3px solid var(--text-2); border-radius: var(--r); box-shadow: 0 6px 22px rgb(0 0 0 / .14); padding: 10px 34px 10px 14px; font: 15.5px/1.45 var(--serif); }
   .xpop p { margin: .4em 0; }
   .xpop ul { margin: .3em 0; padding-left: 1.2em; }
-  .xpop .katex-display { margin: .5em 0; overflow-x: auto; overflow-y: hidden; }
+  .xpop mjx-container[display="true"] { margin: .5em 0 !important; overflow-x: auto; overflow-y: hidden; }
+  svg.math-lab { color: var(--text-2); overflow: visible; }   /* MathJax labels inside the plots (js/ensemble.js, svgMath) */
   .xp-title { font: 600 13px var(--sans); color: var(--text-2); margin-bottom: 2px; }
   .xp-close { position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; border: 0; background: none; color: var(--muted); font-size: 18px; cursor: pointer; border-radius: 4px; }
   .stage { position: relative; min-width: 0; }
@@ -139,7 +146,7 @@
   .tick text { font: 10.5px var(--mono); fill: var(--muted); }
   .tick line, .domain { stroke: var(--grid); }
   #tip { position: fixed; z-index: 110; max-width: 320px; pointer-events: none; background: #fff; border: 1px solid var(--border); border-radius: var(--r); padding: 8px 10px; font: 15px/1.35 var(--serif); box-shadow: 0 4px 16px rgb(0 0 0 / .08); }
-  #tip .m { font: 11.5px var(--mono); color: var(--muted); margin-top: 4px; }
+  #tip .m { font: 11.5px var(--sans); color: var(--muted); margin-top: 4px; }
 
   .rail { background: var(--surface); padding: 12px 14px 40px; min-width: 0; }
   .rail h2 { font: 500 21px/1.2 var(--serif); margin: 4px 0 2px; }
@@ -224,7 +231,7 @@
     <nav class="links"><a href="https://arxiv.org/abs/2603.05432" target="_blank" rel="noopener">Paper ↗</a><a href="https://timvieira.github.io/dpp-lm-demo/">The diversity demo ↗</a></nav>
   </div>
   <p class="lede">Prompt intersection: completions likely under two prompts at once, an ensemble of a language model with itself.</p>
-  <p class="note"><b>Prototype.</b> Unlinked and changing; only the example pairs have completions so far.</p>
+  <p class="note"><b>Work in progress.</b> This demo is still being built.</p>
 </header>
 
 <main class="app">
@@ -245,10 +252,10 @@
     <svg id="valid" aria-label="Each completion's score against its log p under the explicit prompt"></svg>
     <details class="about">
       <summary>What this shows</summary>
-      <p>Each dot is a completion, placed by how likely it is after prompt A (across) and after prompt B (up). The completions were drawn from the <i>token-level</i> product of the two prompts: at every step, the next token is picked in proportion to p<sub>A</sub>·p<sub>B</sub>.</p>
-      <p><b>τ</b> chooses how the two probabilities are combined over the <i>whole string</i>: the generalised mean (Σ ½ p<sub>k</sub><sup>τ</sup>)<sup>1/τ</sup>. At the left end, the minimum: a completion is only as good as its worse prompt says (agreement). In the middle, the product. Then the sum, a mixture, and at the right end the maximum: either prompt liking it is enough (coverage). The grey lines are where that combined score is constant; the list on the right ranks the completions by it, and the red points are the best five.</p>
+      <p>Each dot is a completion, placed by how likely it is after prompt A (across) and after prompt B (up). The completions were drawn from the <i>token-level</i> product of the two prompts: at every step, the next token is picked in proportion to \(p_A \cdot p_B\).</p>
+      <p><b>\(\tau\)</b> chooses how the two probabilities are combined over the <i>whole string</i>: the generalised mean \(\varphi_\tau(y) = \big(\tfrac12\, p_A(y)^\tau + \tfrac12\, p_B(y)^\tau\big)^{1/\tau}\). At the left end, the minimum: a completion is only as good as its worse prompt says (agreement). In the middle, the product. Then the sum, a mixture, and at the right end the maximum: either prompt liking it is enough (coverage). The grey lines are where that combined score is constant; the list on the right ranks the completions by it, and the red points are the best five.</p>
       <p><b>Scored: local</b> uses the token-level product's own string probability instead, the usual way of ensembling. It favours openings both prompts like one token at a time, rather than completions both like as a whole (the paper's Fig. 1).</p>
-      <p>Each completion's probability under the ensemble is its score divided by the ensemble's normaliser, estimated from the N completions with importance weights (the score divided by the probability of drawing the completion). "Uses n of N" is the effective sample size of those weights: how many completions that estimate really rests on.</p>
+      <p>Each completion's probability under the ensemble is its score divided by the ensemble's normaliser, estimated from the \(N\) completions with importance weights (the score divided by the probability of drawing the completion). "Uses \(n\) of \(N\)" is the effective sample size of those weights: how many completions that estimate really rests on.</p>
     </details>
   </aside>
 
@@ -271,8 +278,8 @@
               <label class="field wide"><span class="lab">Runs on<button type="button" class="xbtn" data-x="backend" aria-label="Where do runs happen?">?</button></span><select id="backend"><option value="modal" selected>Modal (the demo’s GPU)</option><option value="space">Hugging Face Space (your GPU quota)</option></select></label>
               <label class="field wide"><span class="lab">Prompt format<button type="button" class="xbtn" data-x="format" aria-label="What is the prompt format?">?</button></span><select id="fmt"><option value="text" selected>Continue text (as in the paper)</option><option value="chat">Chat (messages and replies)</option></select></label>
               <label class="field wide"><span class="lab">Drawn from<button type="button" class="xbtn" data-x="proposal" aria-label="How are the completions drawn?">?</button></span><select id="proposal"><option value="local_product">the token-level product of A and B</option></select></label>
-              <label class="field"><span class="lab">Samples N<button type="button" class="xbtn" data-x="N" aria-label="What is N?">?</button></span><input id="n" type="number" min="2" max="200" step="10" value="200"></label>
-              <label class="field"><span class="lab">Temp. T′<button type="button" class="xbtn" data-x="Tprime" aria-label="What is T′?">?</button></span><input id="tp" type="number" min="0.2" max="2" step="0.1" value="1.0"></label>
+              <label class="field"><span class="lab">Samples \(N\)<button type="button" class="xbtn" data-x="N" aria-label="What is N?">?</button></span><input id="n" type="number" min="2" max="200" step="10" value="200"></label>
+              <label class="field"><span class="lab">Temp. \(T'\)<button type="button" class="xbtn" data-x="Tprime" aria-label="What is T′?">?</button></span><input id="tp" type="number" min="0.2" max="2" step="0.1" value="1.0"></label>
               <label class="field"><span class="lab">Max tokens<button type="button" class="xbtn" data-x="maxtok" aria-label="What is max tokens?">?</button></span><input id="maxtok" type="number" min="8" max="256" step="8" value="32"></label>
               <label class="field wide"><span class="lab">The explicit “A and B” prompt, for checking<button type="button" class="xbtn" data-x="promptC" aria-label="What is the explicit prompt?">?</button></span><textarea id="pc" rows="2" spellcheck="false" placeholder="e.g. My favorite physicist and author is"></textarea></label>
               <p class="menu-note" id="fmt-note"></p>
@@ -286,7 +293,7 @@
     </section>
     <section class="panel step-2" aria-label="Choosing completions">
       <div class="ctl tau">
-        <span class="lab"><span title="The power τ of the generalised mean">τ</span><button type="button" class="xbtn" data-x="tau" aria-label="What does τ do?">?</button></span>
+        <span class="lab"><span title="The power of the generalised mean">\(\tau\)</span><button type="button" class="xbtn" data-x="tau" aria-label="What does τ do?">?</button></span>
         <input id="tau" type="range" min="0" max="1000" step="1" value="500" aria-label="τ">
         <div class="ticks" id="ticks"></div>
         <span class="ends" aria-hidden="true"><span>agreement</span><span>coverage</span></span>
