@@ -48,7 +48,7 @@ const WIDE = matchMedia('(min-width: 1100px)');   // the breakpoint in index.htm
 function trackLayout() {
   const root = document.documentElement.style;
   const set = () => {
-    root.setProperty('--top-h', `${$('.top').offsetHeight}px`);
+    root.setProperty('--top-h', `${Math.ceil($('.top').getBoundingClientRect().bottom)}px`);   // its bottom edge, as on the diversity demo
     root.setProperty('--bar-h', `${$('#bar').offsetHeight}px`);
   };
   set();

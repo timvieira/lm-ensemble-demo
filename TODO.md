@@ -146,6 +146,9 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   README.md as the Space card), deployed by .github/workflows/space.yml; js/space.js calls it through Gradio's queue with
   the visitor's token; "Runs on" in the settings picks Modal or the Space; the Space's errors (quota, not answering,
   busy) have their own messages, with "Run on Modal". The status line says where a pool was drawn.
+- **The title is "Ensembling Language Models"** (Tim, 26 Nov; was "Prompt intersection", which now opens the subtitle). The
+  controls start 10 px under the title block, measured by its bottom edge as on the diversity demo (they overlapped it
+  by 2 px).
 - **Card meta lines** break between fields, never inside one ("log p_A −1.1" stays together).
 - **The explainers' maths was broken in 9 of 16** (since they were written in dpp-lm-demo ad96dde): the TeX sat in
   JS template literals with single backslashes, so \varphi, \tau, \rho, \frac became control characters and
