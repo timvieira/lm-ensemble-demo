@@ -63,8 +63,6 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
 ### Untested after the move
 - Hugging Face sign-in end to end, and a live run (/ensemble_sample) from this address.
 - The page on a phone.
-- The redirect from dpp-lm-demo's lab/ensemble.html keeps the query string and fragment (checked: it lands here;
-  not checked: the URL it lands on).
 
 ### Notes
 - The repository was created as timvieira/prompt-intersection and renamed lm-ensemble-demo the same day (Tim);
@@ -75,7 +73,8 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   (or after `gh auth refresh -s workflow`).
 
 ### In progress (26 Nov)
-- When it has settled: send Robin Chan the link on Zulip (Tim).
+- When it has settled: send Robin Chan the link on Zulip (Tim). Not sent yet: the Claude in Chrome extension is not
+  allowed on zulip.rycolab.inf.ethz.ch, and there is no Zulip API key on the laptop (no ~/.zuliprc).
 
 ### Done (26 Nov)
 - **The diversity demo's full-page layout** (Tim): on wide screens the plot is the page. The title and the controls
@@ -90,6 +89,8 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
     Checked with a DevTools-protocol script outside the repo: headless Chrome's --window-size lays the page out
     87 px shorter than its screenshot and no narrower than ~500 px. This repo has no overflow test like
     dpp-lm-demo's tests/overflow.cjs.
+- **The redirect** from dpp-lm-demo's lab/ensemble.html keeps the query string and fragment (checked live:
+  `?x=1#y` lands on https://timvieira.github.io/lm-ensemble-demo/?x=1#y).
 - **Card meta lines** break between fields, never inside one ("log p_A −1.1" stays together).
 - **The explainers' maths was broken in 9 of 16** (since they were written in dpp-lm-demo ad96dde): the TeX sat in
   JS template literals with single backslashes, so \varphi, \tau, \rho, \frac became control characters and
