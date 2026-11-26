@@ -1,0 +1,12 @@
+[
+  { "id": "physicist_author", "label": "Physicist × author (the paper's Fig. 1)",
+    "A": "My favorite physicist is", "B": "My favorite author is", "C": "My favorite physicist and author is" },
+  { "id": "scientist_musician", "label": "Scientist × musician",
+    "A": "A famous scientist is", "B": "A famous musician is", "C": "A famous scientist and musician is" },
+  { "id": "painter_inventor", "label": "Painter × inventor",
+    "A": "A famous painter is", "B": "A famous inventor is", "C": "A famous painter and inventor is" },
+  { "id": "dog_cat_name", "label": "Dog name × cat name",
+    "A": "A good name for a dog is", "B": "A good name for a cat is", "C": "A good name for both a dog and a cat is" },
+  { "id": "dessert_vegetable", "label": "Dessert × vegetable (little overlap)",
+    "A": "My favorite dessert is", "B": "My favorite vegetable is", "C": "My favorite dessert that is also a vegetable is" }
+]
