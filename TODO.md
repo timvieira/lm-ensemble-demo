@@ -15,13 +15,6 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   sampler)". Their effective sample size is 1.6 to 7.1 of 200 on the text pools (see "Importance weights"). Options:
   (a) redraw them on Modal now at T′ = 1 with the earlier sampler (no code change; most of the measured gain for
   min, harmonic and product); (b) port first, or draw them on the Space, and default to the paper's ψ weights.
-- **The Space's records no longer say which special token ended a completion.** Tim decided (dpp-lm-demo 099e77e)
-  that each completion records it (endToken), to spot replies that run into <|im_start|>. In the new sampler the
-  ending is one choice, like the paper's end symbol, scored with each prompt's total probability of the ending set,
-  so no single token is drawn: the record's end names the ending set that applied (sentence, line, or eos in the
-  chat format), not whether a special token was the one. Modal's pools still record endToken. Found in the 27 Nov
-  cleanup; the TODO did not say so before. Options: leave it out, or draw a token after the fact from the
-  proposal's conditional over the ending set (for display only; no weight changes).
 - **The cloud session that built the prototype still points at dpp-lm-demo** (the cloud session "Missing arrows",
   session_015dhVokNfYW6EJNMhx5kX4W; its 30 commits there run from 25 Nov 21:20 to 26 Nov 16:49 UTC). A message about
   the move (paths, what stays in dpp-lm-demo, this TODO) was sent from Tim's laptop session on 26 Nov; not confirmed
@@ -100,7 +93,10 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
 - **Cut-off completions are weighted as if they were complete** (found 26 Nov, not new): a completion that reaches
   Max tokens is not scored for not ending, under the targets or the proposal, so its weight φ_τ/r compares prefix
   probabilities. Not said on the page beyond "cut off". How many are cut off, and how much weight they carry, is not
-  measured.
+  measured. In the transformation view (27 Nov; my reading, not confirmed by Tim): forcing the end after Max tokens
+  is one more LM → LM transformation, and these weights are exact for it, since at that step every completion ends
+  with probability 1 under A, B and the proposal. What is unmeasured is how far that LM is from the one without the
+  limit, and the page does not present Max tokens as part of the LM's definition.
 - **The self-check differs by up to 0.13 nats on ZeroGPU** (sampling sums against teacher-forced scores, both in
   fp16: 0.049 text, 0.106 chat, 0.073 text at n = 200 with the earlier sampler; 0.07 to 0.13 in the proposal runs of
   26 Nov, Qwen3 14B text; the code it checks did not change). The record reports it as checkMaxAbsErr; nothing here
@@ -161,6 +157,10 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
 
 - Tim ("Go"): both weightings, with the paper's ψ weights as the default.
 - The paper has no proposal temperature (App. E: temperature 1.0), so T′ is the demo's own addition.
+- Tim (27 Nov): prompting is an LM → LM transformation, and so is redefining the end (the sentence and line rules,
+  any special token). The ensemble combines the two transformed LMs, each with a single end symbol, so which base
+  token ended a completion is not part of its outcome: the Space's sampler draws the end as one choice and records
+  no token. Modal's endToken goes when its sampler is ported.
 
 ## Done (26 Nov)
 
@@ -291,7 +291,8 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
 - Decided (Tim): any special or added token ends a completion, in both formats (Qwen3: <|im_end|>,
   <|endoftext|>, <|im_start|>, <think>, tool-call, vision, FIM tokens: 26 in all). The ending set's probability is
   in every score; nothing is blocked or dropped. Each completion records which special token ended it
-  (endToken), to spot e.g. replies that run into <|im_start|>; only Modal's pools still do (see Needs Tim). Before,
+  (endToken), to spot e.g. replies that run into <|im_start|>; superseded on 27 Nov (see "Decided: the proposal"),
+  and only Modal's pools still do. Before,
   only <|im_end|>/<|endoftext|> ended one and other special tokens were kept but hidden by decoding.
 - Done: live runs on Modal. /ensemble_sample on the Modal web app (Hugging Face sign-in, the shared daily run limit
   and monthly GPU budget), two models: Qwen3 14B (the existing L40S container; text and chat formats) and GPT-2
