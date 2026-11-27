@@ -7,17 +7,18 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
 
 ## Needs Tim
 
-- **The paper's conference version.** Everything this TODO and the page say about the paper was checked against
-  the arXiv v1 only. The NeurIPS 2026 version (openreview.net/forum?id=zWigIoVsHo) is not read: OpenReview refuses
-  scripts and is blocked in the Chrome extension. Needs Tim to save its PDF or allow openreview.net. To recheck
-  against it: ρ = 0.958 and 0.090 (§2), quoted by the explicit-prompt explainer; α = 1 − τ (Thm. 4.1, stated for
-  α ∉ {0, 1}; Table 1 gives KL(Φ‖p_k) at τ = 0 and KL(p_k‖Φ) at τ = 1); Fig. 1's product being p_A·p_B; §6
-  evaluating min, product, sum and max side by side; the proposal ψ (§5.2, Prop. 5.2); temperature 1.0 (App. E).
-- **What "product" means at τ = 0.** The page's product is √(p_A p_B), normalised (the τ explainer says so). The
-  paper (arXiv v1) uses both. Fig. 1 and §2 use the unweighted product, locally ("multiplies the token-level
-  probabilities ... then normalizes", the sampler's `local`) and globally ("multiplies these string-level
-  probabilities"): p_A·p_B. Table 1 and Eq. (6), with w ∈ Δ, give Π p_k^{w_k}: √(p_A p_B) at w = ½. Rankings and ρ
-  are the same either way; "ensemble %", log Ẑ and "Uses n of N" are not. Open: which one the page follows.
+- **Which version the page links to.** "Paper ↗" (index.html), README.md, space/README.md and the header of
+  js/ensemble.js cite arXiv:2603.05432. Tim's rule is to cite the conference version: the NeurIPS 2026 paper,
+  openreview.net/forum?id=zWigIoVsHo. Not changed: OpenReview refuses scripts (its API answers 403), so I can't tell
+  whether the forum page is public to visitors who aren't signed in. Needs Tim: is it (a private window shows it), and
+  should the links go there?
+- **What "product" means at τ = 0.** The page's product is √(p_A p_B), normalised (the τ explainer says so). The paper
+  (NeurIPS version, as the arXiv v1) uses both. §2 and Fig. 1 use the unweighted product, locally ("multiplies
+  next-token probabilities from each prompt at every generation step and normalizes at each step", the sampler's
+  `local`) and globally ("multiplies these string-level probabilities"): p_A·p_B. Table 1 and Eq. (6), with w ∈ Δ^K,
+  give Π p_k^{w_k}, and §6 runs the product (τ = 0) with equal expert weights: √(p_A p_B). Rankings and ρ are the
+  same either way; "ensemble %", log Ẑ and "Uses n of N" are not. Recommended: keep √ (Eq. (6) and §6). Open: which
+  one the page follows.
 
 ## Open
 
@@ -83,6 +84,9 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   (physicist × author) sit one under the other, and Hawking's label is 16 px below its dot: the labels are only pushed
   apart vertically (rechecked after the full-page layout: unchanged). On a narrow frame most labels sit left of their
   dots and are pushed down one by one (Tim's screenshot, 26 Nov: "Albert Einstein." about 50 px from its point).
+- **space/ensemble_lib.py's docstring** (line 24) still says "the paper samples at temperature 1"; the NeurIPS
+  version uses 0.7 on GSM8K (App. G). The page is fixed. The file changes with the next edit to the sampler, in both
+  copies: a push to dpp-lm-demo's modal/ redeploys Modal, which isn't worth doing for a comment alone.
 - **The self-check differs by up to 0.13 nats on ZeroGPU** (sampling sums against teacher-forced scores, both in
   fp16: 0.049 text, 0.106 chat, 0.073 text at n = 200 with the earlier sampler; 0.07 to 0.13 in the proposal runs of
   26 Nov, Qwen3 14B text; the code it checks did not change). The record reports it as checkMaxAbsErr; nothing here
@@ -131,9 +135,10 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
 
 - Tim: importance sampling, not SMC. The proposal is a local f-ensemble with its own τ′, weights and T′, reweighted
   to the global target τ, like the DPP demo's T′ and T.
-- Against the paper (arXiv v1, §5): Def. 5.1 is this sampler, any proposal r with weights φ/r. The paper's own
-  proposal (§5.2, Prop. 5.2, §6) is r ∝ ψ(x′ | x) = f(p⃗_A(x x′), p⃗_B(x x′)) / f(p⃗_A(x), p⃗_B(x)): a local
-  f-ensemble whose weights follow the prefix, ŵ_k(x) ∝ w_k p⃗_k(x)^τ. It equals the fixed-weight one only at τ = 0.
+- Against the paper (§5, the same in the arXiv v1 and the NeurIPS version): Def. 5.1 is this sampler, any proposal
+  r with weights φ/r. The paper's own proposal (§5.2, Prop. 5.2, §6) is
+  r ∝ ψ(x′ | x) = f(p⃗_A(x x′), p⃗_B(x x′)) / f(p⃗_A(x), p⃗_B(x)): a local f-ensemble whose weights follow the prefix,
+  ŵ_k(x) ∝ w_k p⃗_k(x)^τ. It equals the fixed-weight one only at τ = 0.
   At τ = 1 it is exact: the weights are the posterior over the two prompts, and every importance weight is equal.
 - Toy check (scripts/proposal-check.py; two random LMs, 3 symbols, length ≤ 5, one seed). Large-n ESS/n, fixed
   weights vs ψ:
@@ -147,7 +152,8 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   | ≈ max (8) | 0.58 | 0.95 |
 
 - Tim ("Go"): both weightings, with the paper's ψ weights as the default.
-- The paper has no proposal temperature (App. E: temperature 1.0), so T′ is the demo's own addition.
+- The paper has no proposal temperature (NeurIPS version, App. G: temperature 1.0, 0.7 on GSM8K), so T′ is the
+  demo's own addition.
 - Tim (27 Nov): prompting is an LM → LM transformation, and so is redefining the end (the sentence and line rules,
   any special token). The ensemble combines the two transformed LMs, each with a single end symbol, so which base
   token ended a completion is not part of its outcome: the Space's sampler draws the end as one choice and records
@@ -185,11 +191,17 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   the mixture proposal exact; runs in the Space deploy workflow) and scripts/sampler-check.py (GPT-2 on a CPU: 8
   proposals, recorded logr, logpA, logpB equal an uncached step-by-step recomputation to 7e-5 nats). Local Space (CPU,
   GPT-2, 6 draws, sum proposal): ESS 6.0 of 6 at the sum target. Measured on Qwen3 14B: see "Importance weights".
-- **The page's claims about the paper, against the arXiv v1** (the conference version: see Needs Tim): ρ = 0.958 and
-  0.090 (§2) match; α = 1 − τ matches Thm. 4.1; "the paper's main ensemble" overstated it (Fig. 1 uses the product,
-  but §6 evaluates min, product, sum and max side by side, and the consensus-seeking two, min and product, do best).
-  The τ explainer now says the paper's Fig. 1 uses the product, there p_A·p_B without the square root (the same
-  ranking).
+- **The page's claims about the paper, against the NeurIPS 2026 version** (27 Nov; Tim's PDF, kept untracked at
+  references/chan2026ensembling-neurips.pdf, 34 pages; numbers read on the page images). Match: ρ = 0.958 and 0.090
+  (§2, p. 3); Fig. 1's 200 completions drawn by best-first beam search (width 20), ending in a period, scored with the
+  local product; α = 1 − τ (Thm. 4.1, for α ∈ ℝ ∖ {0, 1}, p. 5); Table 1 (p. 4): KL(Φ‖p_k) at τ = 0, KL(p_k‖Φ) at
+  τ = 1, a quadratic row at τ = 2; Def. 5.1 (importance sampling), §5.2's shaping function ψ⃗(x) = f(p⃗_1(x), …,
+  p⃗_K(x)) with the end as in Eq. (8b), and Prop. 5.2 (r* ∝ ψ is locally optimal) keep their numbers; §6 evaluates
+  min, product (τ = 0), sum and max with equal weights, and §6.2 finds the consensus-seeking ones best, min best
+  overall. Changed: the temperature (App. G, was App. E) is 1.0 except 0.7 on GSM8K. The T′ explainer said "The
+  paper samples at temperature 1" and now says so (space/ensemble_lib.py: see Open). Earlier, against the arXiv v1
+  (26 Nov): "the paper's main ensemble" overstated it; the τ explainer now says Fig. 1 uses the product, there
+  p_A·p_B without the square root (the same ranking).
 - **Hugging Face sign-in accepts this address** (26 Nov, 14:32). The OAuth app "Diverse sampling demo" (client
   43d09d55-…; huggingface.co/settings/connected-applications, Developer Applications, Settings) lists
   https://timvieira.github.io/dpp-lm-demo/, https://timvieira.github.io/lm-ensemble-demo/ and https://timvieira.github.io/,

@@ -697,7 +697,7 @@ const ENSEMBLE_EXPLAIN = {
   N: { title: 'Samples $N$', body: `<p>How many completions are drawn. The ranking and every readout are computed from these N; more completions represent the ensemble better.</p>` },
   Tprime: {
     title: "The proposal's temperature $T'$",
-    body: `<p>Sharpens ($T' &lt; 1$) or flattens ($T' &gt; 1$) the proposal at every step. The paper samples at temperature 1; $T'$ is this demo's addition. Flatter draws are more varied, but further from the target.</p>
+    body: `<p>Sharpens ($T' &lt; 1$) or flattens ($T' &gt; 1$) the proposal at every step. The paper's experiments use temperature 1 (0.7 on GSM8K); $T'$ is this demo's addition, and it changes only the proposal, not the target. Flatter draws are more varied, but further from the target.</p>
       <p>For the product, $T' = \\tfrac12$ gives $p_A \\cdot p_B$ token by token, the local product of the paper's Fig. 1, which the cached pools use; $T' = 1$ gives $\\sqrt{p_A p_B}$, the target's product taken token by token.</p>`,
   },
   maxtok: { title: 'Max tokens', body: `<p>A completion ends at the end of its first sentence or line, or after this many tokens, whichever comes first. The limit is part of each prompt’s language model, like the sentence rules: a completion that reaches it ends there with probability 1, under both prompts and under the proposal, so it is scored as a complete completion. It is marked “ended at the token limit”.</p>` },
