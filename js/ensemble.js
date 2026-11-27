@@ -104,7 +104,8 @@ const MODELS = {
 };
 const MODAL_URL = 'https://timvieira--dpp-lm-sampler-web.modal.run';
 // The second backend (space/app.py): a ZeroGPU Space, called with the visitor's sign-in, so runs use their own
-// Hugging Face GPU quota. Same weights and the same pool code (space/ensemble_lib.py) as Modal.
+// Hugging Face GPU quota. Same weights as Modal; its sampler (space/ensemble_lib.py) draws from any proposal in the
+// family (τ', w_A, weights, T'), Modal's from the product only (modalCan).
 const SPACE_URL = 'https://xtimv-lm-ensemble-demo.hf.space';
 const BACKENDS = { modal: { short: '', on: 'Modal', drawn: 'Modal' }, space: { short: ' · HF Space', on: 'the Hugging Face Space, on your GPU quota', drawn: 'the Hugging Face Space' } };
 // Modal runs the earlier sampler: the product with equal weights, (p_A p_B)^(1/t) token by token, which is T' = t/2

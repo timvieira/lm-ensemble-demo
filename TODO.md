@@ -1,199 +1,207 @@
 # To do
 
-Moved from dpp-lm-demo's TODO.md on 2026-11-26 (dpp-lm-demo@5d42446), as it was. Paths in it are dpp-lm-demo's:
+Started as dpp-lm-demo's TODO.md, moved here on 2026-11-26 (dpp-lm-demo@5d42446); cleaned up on 27 Nov (resolved items
+moved to Done). T′ is given throughout in the Space's units: the proposal is ∝ f(…)^{1/T′}, so at τ′ = 0, T′ = ½ is
+p_A·p_B token by token and T′ = 1 is √(p_A p_B); Modal's t_prime is 2T′. Paths in the last section are dpp-lm-demo's:
 lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ and scripts/ are still in dpp-lm-demo.
 
-## Open after the move (26 Nov): nothing here is resolved yet
+## Needs Tim
 
-### Needs Tim
-- **Done: Hugging Face sign-in accepts this address** (26 Nov, 14:32). The OAuth app "Diverse sampling demo" (client
-  43d09d55-…; huggingface.co/settings/connected-applications, Developer Applications, Settings) lists
-  https://timvieira.github.io/dpp-lm-demo/, https://timvieira.github.io/lm-ensemble-demo/ and https://timvieira.github.io/,
-  each in its own box (the + button; several in one box are read as one address). Hugging Face matches the address
-  exactly: a parent such as the homepage does not cover the pages under it (checked). Each new demo page that signs in
-  needs its own line. A sign-in and a Space run from the page worked (Tim, 14:38; see Done).
-- **The cloud session that built the prototype still points at dpp-lm-demo.** Point it at this repository. Its
-  commits to dpp-lm-demo's lab/ensemble* no longer reach any page (that address redirects here). One commit landed
-  there after the move (3af271a, empty completions labelled) and was ported here (72d3fb3). Before closing this item,
-  check dpp-lm-demo for later ensemble commits: `git log 3af271a.. -- lab/ensemble.html lab/ensemble.js lab/ensemble-math.js data/ensemble`.
-  26 Nov: it is the cloud session "Missing arrows" (session_015dhVokNfYW6EJNMhx5kX4W; its 30 commits in dpp-lm-demo run from
-  25 Nov 21:20 to 26 Nov 16:49 UTC). A message telling it about the move (paths, what stays in dpp-lm-demo, this
-  TODO) was sent from Tim's laptop session; not confirmed read, and it asks the session to confirm with Tim.
-  Still needed: Tim tells it in that session. It may also need the Claude GitHub app to have access to this new
-  repository (not checked: the laptop's gh token cannot list app installations). No ensemble commits landed in
-  dpp-lm-demo after the move (checked 26 Nov).
-- **Where the GPU code lives.** Decided for now (Tim, 26 Nov): it stays in dpp-lm-demo's Modal app (`dpp-lm-sampler`:
-  modal/app.py, modal/ensemble_lib.py, scripts/ensemble_pool.py) with the pools workflow, which reads dpp-lm-demo's
-  data/ensemble/presets.json and commits pools there. So a preset change or new pools must be copied by hand between
-  dpp-lm-demo's data/ensemble/ and data/ here. Open: whether it moves here later.
-  26 Nov (Tim): a second backend lives here, a Hugging Face ZeroGPU Space (xtimv/lm-ensemble-demo, from space/), next
-  to Modal; the visitor picks it under "Runs on". space/ensemble_lib.py started as a copy of dpp-lm-demo's
-  modal/ensemble_lib.py (at 099e77e). Since 26 Nov they differ: the Space's draws from the proposal family below
-  (schema 3), Modal's from the token-level product only (schema 2).
-- **The unused copies in dpp-lm-demo.** Decided (Tim, 26 Nov): lab/ensemble*.js, data/ensemble/,
-  tests/ensemble.test.mjs and docs/handoff-ensemble-demo.md stay there. They will drift from the copies here.
-- **What "product" means at τ = 0.** The page's product is the weighted geometric mean √(p_A p_B) (weights ½; the
-  τ explainer says so), normalised. Whether the paper's Fig. 1 uses that or p_A·p_B has not been checked against
-  the paper. Rankings and ρ are the same either way; "ensemble %", log Ẑ and "Uses n of N" are not.
-  26 Nov, read in the **arXiv v1** only (the NeurIPS 2026 version, openreview.net/forum?id=zWigIoVsHo, is not read
-  yet: OpenReview refuses scripts and is blocked in the Chrome extension). The paper uses both. Fig. 1 and §2 use
-  the unweighted product, locally ("multiplies the token-level probabilities ... then normalizes", which is the
-  sampler's `local`) and globally ("multiplies these string-level probabilities"): p_A·p_B. Table 1 and Eq. (6),
-  with w ∈ Δ, give Π p_k^{w_k}: √(p_A p_B) at w = ½, which the page uses for the global score. Open: which one the
-  page should follow.
+- **Port the new sampler to Modal?** Modal (dpp-lm-demo's modal/ensemble_lib.py, shared with the DPP demo's app)
+  still runs the earlier sampler (schema 2): the product only, with the ending summed token by token. The page sends
+  Modal only τ′ = product, w_A = ½, 0.1 ≤ T′ ≤ 1 (modalCan in js/ensemble.js) and offers the Space for anything else.
+- **Redraw the cached pools, and move the page's defaults?** The pools in data/ are schema 2, the product at T′ = ½,
+  so the page's defaults stay at that proposal (DEFAULTS in js/ensemble.js) and the status line says "(the earlier
+  sampler)". Their effective sample size is 1.6 to 7.1 of 200 on the text pools (see "Importance weights"). Options:
+  (a) redraw them on Modal now at T′ = 1 with the earlier sampler (no code change; most of the measured gain for
+  min, harmonic and product); (b) port first, or draw them on the Space, and default to the paper's ψ weights.
+- **The Space's records no longer say which special token ended a completion.** Tim decided (dpp-lm-demo 099e77e)
+  that each completion records it (endToken), to spot replies that run into <|im_start|>. In the new sampler the
+  ending is one choice, like the paper's end symbol, scored with each prompt's total probability of the ending set,
+  so no single token is drawn: the record's end names the ending set that applied (sentence, line, or eos in the
+  chat format), not whether a special token was the one. Modal's pools still record endToken. Found in the 27 Nov
+  cleanup; the TODO did not say so before. Options: leave it out, or draw a token after the fact from the
+  proposal's conditional over the ending set (for display only; no weight changes).
+- **The cloud session that built the prototype still points at dpp-lm-demo** (the cloud session "Missing arrows",
+  session_015dhVokNfYW6EJNMhx5kX4W; its 30 commits there run from 25 Nov 21:20 to 26 Nov 16:49 UTC). A message about
+  the move (paths, what stays in dpp-lm-demo, this TODO) was sent from Tim's laptop session on 26 Nov; not confirmed
+  read, and it asks the session to confirm with Tim. Still needed: Tim tells it in that session. It may also need
+  the Claude GitHub app to have access to this repository (not checked: the laptop's gh token cannot list app
+  installations). No ensemble commits have landed in dpp-lm-demo since the move (checked 27 Nov with the GitHub API:
+  the last are the move commits ffa7d0e and ceb7255).
+- **The paper's conference version.** Everything this TODO and the page say about the paper was checked against
+  the arXiv v1 only. The NeurIPS 2026 version (openreview.net/forum?id=zWigIoVsHo) is not read: OpenReview refuses
+  scripts and is blocked in the Chrome extension. Needs Tim to save its PDF or allow openreview.net. To recheck
+  against it: ρ = 0.958 and 0.090 (§2), quoted by the explicit-prompt explainer; α = 1 − τ (Thm. 4.1, stated for
+  α ∉ {0, 1}; Table 1 gives KL(Φ‖p_k) at τ = 0 and KL(p_k‖Φ) at τ = 1); Fig. 1's product being p_A·p_B; §6
+  evaluating min, product, sum and max side by side; the proposal ψ (§5.2, Prop. 5.2); temperature 1.0 (App. E).
+- **What "product" means at τ = 0.** The page's product is √(p_A p_B), normalised (the τ explainer says so). The
+  paper (arXiv v1) uses both. Fig. 1 and §2 use the unweighted product, locally ("multiplies the token-level
+  probabilities ... then normalizes", the sampler's `local`) and globally ("multiplies these string-level
+  probabilities"): p_A·p_B. Table 1 and Eq. (6), with w ∈ Δ, give Π p_k^{w_k}: √(p_A p_B) at w = ½. Rankings and ρ
+  are the same either way; "ensemble %", log Ẑ and "Uses n of N" are not. Open: which one the page follows.
 
-### Found in the review of the page (26 Nov)
-- **The importance weights are concentrated on most continue-text pools**, so log Ẑ and every card's "ensemble %"
-  rest on a few draws. Effective sample size of 200 (proposal: the token-level product), computed from data/ on
-  26 Nov (dpp-lm-demo@5d42446 pools):
+## Open
 
-  | pool | √(p_A p_B) (the page) | p_A·p_B |
-  |---|---|---|
-  | Qwen3 14B, text (5 pairs) | 1.6–7.1 | 2.5–24.2 |
-  | GPT-2, text (5 pairs) | 1.7–5.8 | 2.2–4.5 |
-  | Qwen3 14B, chat (5 pairs) | 1.0–200 | 1.0–194 |
+- **Importance weights.**
+  - The cached pools (the page's default; proposal p_A·p_B token by token, T′ = ½) put the weight on a few draws, so
+    log Ẑ and every card's "ensemble %" rest on them. Effective sample size of 200, computed from data/ on 26 Nov:
 
-  Physicist × author (Qwen3, text), the page's default: ESS 1.6, and one draw ("Toni Morrison.") carries 79% of the
-  weight. Dessert × vegetable (chat): ESS 1.0 ("Cucumber" 99%). The page shows "Uses n of N", so this is disclosed,
-  but nothing says how uncertain the percentages are. Open: what to do (more draws, a better proposal, SMC as in
-  the paper, or showing the uncertainty).
-  Experiment (26 Nov, physicist × author, Qwen3 14B, text, 200, seed 0; one pool each, so the numbers are noisy). ESS at
-  min / harmonic / product / sum / max: T′ = 1 (the cached pool) 4.7 / 4.9 / 1.6 / 1.0 / 1.0, 84 distinct; T′ = 2 (drawn
-  on the Space) 24.9 / 28.7 / 52.1 / 7.4 / 7.2, 184 distinct, largest share at product 4% (was 79%). At T′ = 2 the
-  token-level proposal is ∝ √(p_A p_B), the page's product target token by token, so the weights reduce to the
-  per-step normalisers. For sum and max, a mixture of A and B is the matching proposal (at τ = 1 it is the target).
-  Asked by Tim: a better proposal, and SMC as in the paper (proposals in the reply of 26 Nov).
-  Design (Tim, 26 Nov): importance sampling, not SMC. The proposal is a local f-ensemble with its own τ′, weights
-  and T′, reweighted to the global target τ, like the DPP demo's T′ and T. Waiting for Tim's go-ahead.
-  Against the paper (arXiv v1, §5):
-  - Def. 5.1 is this sampler: any proposal r, with weights w = φ/r.
-  - The paper's own proposal (§5.2, Prop. 5.2, §6) is r ∝ ψ(x′ | x) = f(p⃗_A(x x′), p⃗_B(x x′)) / f(p⃗_A(x), p⃗_B(x)).
-    That is a local f-ensemble whose weights follow the prefix, ŵ_k(x) ∝ w_k p⃗_k(x)^τ. It equals the fixed-weight
-    one only at τ = 0. At τ = 1 it is exact: the weights are the posterior over the two prompts, and every
-    importance weight is equal.
-  - Toy check (scripts/proposal-check.py; two random LMs, 3 symbols, length ≤ 5, one seed). Large-n ESS/n, fixed
-    weights vs ψ:
-
-    | τ | fixed | ψ |
+    | pool | √(p_A p_B) (the page) | p_A·p_B |
     |---|---|---|
-    | ≈ min (−8) | 0.59 | 0.61 |
-    | harmonic (−1) | 0.62 | 0.63 |
-    | product (0) | 0.73 | 0.73 |
-    | sum (1) | 0.63 | 1.00 |
-    | ≈ max (8) | 0.58 | 0.95 |
+    | Qwen3 14B, text (5 pairs) | 1.6–7.1 | 2.5–24.2 |
+    | GPT-2, text (5 pairs) | 1.7–5.8 | 2.2–4.5 |
+    | Qwen3 14B, chat (5 pairs) | 1.0–200 | 1.0–194 |
 
-  - Decided (Tim, 26 Nov: "Go"): both, with the paper's ψ weights as the default.
-  - The paper has no proposal temperature (App. E: temperature 1.0), so T′ is the demo's own addition.
-  - **Done on the Space and the page (26 Nov):** `space/ensemble_lib.py` (local_f, proposal_logprobs; schema 3),
-    the Space API `ensemble_pool` (the older `ensemble_sample` maps to the product at T′ = t/2), and the settings
-    ("The proposal: a local ensemble": its weights, τ′, w_A, T′). The ending step is one choice, scored with the
-    mean of each prompt's total ending probability, as for the paper's end symbol; the schema-2 sampler summed it
-    token by token. Checked: tests/test_proposal.py (every step against the definition on an enumerable toy model,
-    to 2.6e-6 in log r; the mixture proposal exact; runs in the Space deploy workflow) and
-    scripts/sampler-check.py (GPT-2 on a CPU: 8 proposals, recorded logr, logpA, logpB equal an uncached step-by-step
-    recomputation to 7e-5 nats). Local Space (CPU, GPT-2, 6 draws, sum proposal): ESS 6.0 of 6 at the sum target.
-  - **Measured on ZeroGPU (26 Nov, ~21:20):** Qwen3 14B, physicist × author, text, N = 200, seed 0, T′ = 1, w_A = ½;
-    one pool per proposal, so the numbers are noisy. ESS at each target:
+    Physicist × author (Qwen3, text), the page's default: ESS 1.6, and one draw ("Toni Morrison.") carries 79% of
+    the weight. Dessert × vegetable (chat): ESS 1.0 ("Cucumber" 99%). The page shows "Uses n of N", but nothing says
+    how uncertain the percentages are (open).
+  - Other proposals, Qwen3 14B on ZeroGPU (26 Nov; physicist × author, text, N = 200, seed 0, w_A = ½; one pool
+    each, so the numbers are noisy; scripts/space-check.mjs). ESS at each target, bold where τ′ = τ:
 
     | proposal | min | harmonic | product | sum | max | distinct |
     |---|---|---|---|---|---|---|
-    | cached pool (product, T′ = ½, earlier sampler) | 4.7 | 4.9 | 1.6 | 1.0 | 1.0 | 84 |
-    | product | 25.8 | 30.2 | **61.3** | 24.1 | 23.6 | 177 |
-    | min, ψ weights | **33.2** | 33.4 | 16.8 | 4.2 | 4.2 | 181 |
-    | harmonic, ψ weights | 33.5 | **37.0** | 20.1 | 5.8 | 5.7 | 182 |
-    | sum, ψ weights | 3.7 | 4.7 | 20.0 | **200.0** | 199.6 | 156 |
-    | max, ψ weights | 2.2 | 3.0 | 11.1 | 192.5 | **194.5** | 148 |
-    | sum, fixed weights | 8.9 | 11.9 | 32.1 | 53.3 | 52.6 | 169 |
+    | cached pool: earlier sampler, product, T′ = ½ | 4.7 | 4.9 | 1.6 | 1.0 | 1.0 | 84 |
+    | earlier sampler, product, T′ = 1 | 24.9 | 28.7 | 52.1 | 7.4 | 7.2 | 184 |
+    | product, T′ = 1 | 25.8 | 30.2 | **61.3** | 24.1 | 23.6 | 177 |
+    | min, ψ weights, T′ = 1 | **33.2** | 33.4 | 16.8 | 4.2 | 4.2 | 181 |
+    | harmonic, ψ weights, T′ = 1 | 33.5 | **37.0** | 20.1 | 5.8 | 5.7 | 182 |
+    | sum, ψ weights, T′ = 1 | 3.7 | 4.7 | 20.0 | **200.0** | 199.6 | 156 |
+    | max, ψ weights, T′ = 1 | 2.2 | 3.0 | 11.1 | 192.5 | **194.5** | 148 |
+    | sum, fixed weights, T′ = 1 | 8.9 | 11.9 | 32.1 | 53.3 | 52.6 | 169 |
 
-    With τ′ = τ (bold), every target goes from 1 to 5 of 200 to between 33 and 200. Sum with ψ weights is exact
-    (200.0), against 53.3 with fixed weights. Max with fixed weights was not run: Tim's ZeroGPU quota ran out
-    ("102s requested vs. 91s left", resets about 17 h later). Script: scripts/space-check.mjs.
-    Where the gain comes from (27 Nov): that comparison mixes two changes, T′ = ½ → 1 and τ′ = τ. The product row
-    changes only T′, and it already lifts min and harmonic to 25.8 and 30.2; the earlier sampler at the same T′
-    gave 24.9 and 28.7 (the 26 Nov experiment above). Matching τ′ adds about a third on top (33.2, 37.0), which
-    may be within one pool's noise (unmeasured). Matching τ′ is decisive for sum and max (24 → 200 and 194), where
-    the ψ weights make the proposal exact or nearly so. Why min and harmonic stay near 17%: with ψ weights and
-    T′ = 1, a draw's importance weight is the product of its per-step normalisers Σ_{x′} ψ(x′ | x), which are 1 at
-    every step only at τ = 1 (otherwise only where the two prompts agree on the next token); no local proposal
-    removes that spread (the paper's SMC resamples on exactly these).
-    Open: repeat with several seeds before reading anything into 26 vs 33.
-  - **Open, needs Tim: Modal.** Modal (dpp-lm-demo's modal/ensemble_lib.py) still runs the schema-2 sampler. The
-    page sends Modal only τ′ = product, w_A = ½, T′ ≤ 1 (its t_prime = 2T′) and otherwise offers the Space. Porting
-    the sampler there changes code shared with the DPP demo's app.
-  - **Open, needs Tim: the cached pools.** They are schema 2 (the product at T′ = ½, p_A·p_B token by token, the
-    old ending step), so the page's defaults stay at that proposal for now (DEFAULTS in js/ensemble.js), and the
-    status line says "(the earlier sampler)". Redraw them with the new sampler (on Modal after the port, or on the
-    Space), then move the defaults to the new proposal (T′ = 1, the paper's ψ weights).
-- **The chat pools are nearly deterministic: 1 to 6 distinct completions in 200.** Painter × inventor is
-  "Leonardo da Vinci" 200 times (hence ESS 200: equal weights, one string); physicist × author is 3 strings
-  (Albert Einstein ×157, Stephen Hawking ×41, J.K. Rowling ×2); dessert × vegetable is "Carrot cake" in three
-  spellings plus one more. The token-level product of two chat replies is very peaked at T′ = 1, so these pools
-  show little of either prompt's spread. Open: what the chat format should show (a higher T′ for the proposal?).
-- **"____." ranks 3rd for physicist × author** (Qwen3, text): a fill-in-the-blank completion. Relates to the open
-  preset-wording item below.
-- **Plot labels still crowd:** "Richard Feynman." and "Stephen Hawking." (physicist × author) sit one under the other,
-  and Hawking's label is 16 px below its dot (the labels are only pushed apart vertically). Rechecked after the
-  full-page layout: unchanged.
+    The second row was drawn on the Space before the new sampler; its largest share at product was 4% (79% in the
+    cached pool). It and the third row differ only in the ending step (summed token by token, or one choice);
+    their sum and max (7 vs 24) differ for a reason not looked into (that, or noise). Max with fixed weights was not
+    run: Tim's ZeroGPU quota ran out.
+  - Where the gain comes from (27 Nov). For min, harmonic and product, most of it is T′ = 1 instead of ½ (rows 2
+    and 3); matching τ′ adds about a third (33.2, 37.0 against 25.8, 30.2), which may be within one pool's noise
+    (unmeasured). For sum and max, matching τ′ with the ψ weights is decisive (24 → 200 and 194): at τ′ = τ = 1 the
+    proposal is the target. Why min and harmonic stay near 17%: with ψ weights and T′ = 1, a draw's importance weight
+    is the product of its per-step normalisers Σ_{x′} ψ(x′ | x), which are 1 at every step only at τ = 1 (otherwise
+    only where the two prompts agree on the next token); no local proposal removes that spread (the paper's SMC
+    resamples on exactly these).
+  - Open: repeat with several seeds before reading anything into 26 vs 33 (each pool requests 102 s of Tim's
+    ZeroGPU quota and runs about 18 s; or Modal after a port).
+- **The chat pools are nearly deterministic: 1 to 6 distinct completions in 200** (the cached pools, T′ = ½).
+  Painter × inventor is "Leonardo da Vinci" 200 times (hence ESS 200: equal weights, one string); physicist × author
+  is 3 strings (Albert Einstein ×157, Stephen Hawking ×41, J.K. Rowling ×2); dessert × vegetable is "Carrot cake" in
+  three spellings plus one more. The token-level p_A·p_B of two chat replies is very peaked, so these pools show
+  little of either prompt's spread. Open: what the chat format should show; T′ = 1 and the new proposals are not
+  tried on chat yet.
+- **"____." ranks 3rd for physicist × author** (Qwen3, text): a fill-in-the-blank completion. Relates to the preset
+  wording item below.
+- **Preset wording.** "A famous scientist is" continues as "…coming to our school next week."; better phrasings
+  (e.g. "My favorite scientist is") or a different pair list.
+- **Plot labels crowd, and on a phone drift far from their dots.** "Richard Feynman." and "Stephen Hawking."
+  (physicist × author) sit one under the other, and Hawking's label is 16 px below its dot: the labels are only pushed
+  apart vertically (rechecked after the full-page layout: unchanged). On a narrow frame most labels sit left of their
+  dots and are pushed down one by one (Tim's screenshot, 26 Nov: "Albert Einstein." about 50 px from its point).
 - **Cut-off completions are weighted as if they were complete** (found 26 Nov, not new): a completion that reaches
   Max tokens is not scored for not ending, under the targets or the proposal, so its weight φ_τ/r compares prefix
   probabilities. Not said on the page beyond "cut off". How many are cut off, and how much weight they carry, is not
   measured.
-- **The page makes claims about the paper that have not been checked against it** (they came from the handoff):
-  the τ explainer says the product is "the paper's main ensemble" and that each τ is the distribution closest to
-  both prompts under an α-divergence with α = 1 − τ; the explicit-prompt explainer quotes the paper's ρ = 0.96
-  (global) and ρ = 0.09 (local). Check each against the paper's PDF (the conference version).
-  26 Nov, against the arXiv v1 only (the conference version is still to be read):
-  - ρ = 0.958 and 0.090 (§2) match.
-  - α = 1 − τ matches Thm. 4.1, which is stated for α ∉ {0, 1}. Table 1 gives KL(Φ‖p_k) at τ = 0 and KL(p_k‖Φ) at τ = 1.
-  - "The paper's main ensemble" overstates it. Fig. 1 uses the product, but §6 evaluates min, product, sum and max
-    side by side; the consensus-seeking two, min and product, do best.
-    Fixed on the page (26 Nov): the τ explainer now says the paper's Fig. 1 uses the product, there p_A·p_B
-    without the square root (the same ranking).
-- **On a phone the labels drift far from their dots** (Tim's screenshot, 26 Nov: "Albert Einstein." about 50 px from
-  its point): on a narrow frame most labels sit left of their dots and are pushed down one by one. Same cause as the
-  crowding item above.
+- **The self-check differs by up to 0.13 nats on ZeroGPU** (sampling sums against teacher-forced scores, both in
+  fp16: 0.049 text, 0.106 chat, 0.073 text at n = 200 with the earlier sampler; 0.07 to 0.13 in the proposal runs of
+  26 Nov, Qwen3 14B text; the code it checks did not change). The record reports it as checkMaxAbsErr; nothing here
+  filters on it. dpp-lm-demo's pools workflow fails a pool above 0.5 nats and reports 0.09 seen on Modal. The page
+  uses the sampling sums (logpA, logpB).
+- **The GPU time reserved per run is about 4 times what a run takes** (space/app.py, _duration: 68 s for n = 200 at
+  32 tokens; 17 to 21 s measured from the client). ZeroGPU checks before the run: on 26 Nov it refused a run because
+  it "requested" 102 s with 91 s of Tim's quota left (102 = 1.5 × 68; where the 1.5 comes from is not known). So a
+  visitor needs about 100 s of quota left for a 20 s run. Open: whether the quota is then charged by the time
+  reserved or used, and a tighter estimate (a run that outlasts its reservation is cut off).
+- **Whether the GPU code moves here** (see Notes: where it lives now).
 
-### Open: the Hugging Face Space backend (26 Nov)
-- **Done: the Space is xtimv/lm-ensemble-demo** (Tim renamed it, 26 Nov; it was created as xtimv/LM-ensemble-demo,
-  which now redirects). Its address, xtimv-lm-ensemble-demo.hf.space (the page's SPACE_URL), did not change.
-- **Done: the deploy token** (26 Nov). The repository secret HF_TOKEN is set (Tim); the first deploy uploaded space/ to
-  the Space (its commit b7bb356). (Before the rename, the upload followed Hugging Face's redirect from the lowercase name.)
-- **Tested on ZeroGPU** (26 Nov, through the page's own client, scripts/space-check.mjs, on Tim's quota): the Space built
-  and ran on zero-a10g in about 3 minutes; it offers Qwen3 14B (the unpacked AWQ weights) and GPT-2; Gradio 6.32's
-  queue protocol works with js/space.js. Pools: GPT-2 text n = 4; Qwen3 14B text n = 8, chat n = 4, and text n = 200 at
-  32 tokens (the page's default) in 17.5 s (9 s sampling, 8 s rescoring). With seed 0 the first Qwen3 completion
-  starts as in the cached Modal pool ("Kip Thorne, and I'm trying to understand...") and then diverges: the same
-  weights on another GPU round differently.
-- **The self-check differs by up to 0.11 nats on ZeroGPU** (0.13 in the proposal runs of 26 Nov: τ′ = min, Qwen3
-  14B text; the code it checks did not change) (sampling sums against teacher-forced scores, both in fp16:
-  0.049 text, 0.106 chat, 0.073 text at n = 200). The record reports it as checkMaxAbsErr; nothing here filters on it.
-  dpp-lm-demo's pools workflow fails a pool above 0.5 nats and reports 0.09 seen on Modal. The page uses the sampling
-  sums (logpA, logpB).
-- **The GPU time reserved per run is about 4 times what a run takes** (space/app.py, _duration: 68 s reserved for n =
-  200 at 32 tokens; 17 s measured). Open: whether ZeroGPU charges the visitor's quota by the time reserved or used; if
-  reserved, a tighter estimate saves visitors' quota (but a run that outlasts its reservation is cut off).
-- **Untested on ZeroGPU:** the quota message (ZeroGPU's own error text, matched by "quota"). Also untested: a sign-in
-  and run on Modal from this page.
+## Untested
 
-### Untested after the move
-- Hugging Face sign-in end to end, and a live run (/ensemble_sample) from this address.
-- A run of the new proposals from the page itself, signed in (26 Nov). The Space's API was checked with the page's own
-  client (js/space.js) and the page's argument order by scripts/space-check.mjs, not by pressing ↑ while signed in.
-- The page on a real phone; pinch and two-finger moves on a real touch screen (not simulated: d3.zoom's own touch handling).
+- A run of the new proposals from the page itself, signed in. The Space's API was checked with the page's own client
+  (js/space.js) and the page's argument order by scripts/space-check.mjs, not by pressing ↑ while signed in.
+- A sign-in and a run on Modal from this address (the Space's was done by Tim on 26 Nov; see Done).
+- The page's message when the visitor's ZeroGPU quota is used up: js/space.js classifies ZeroGPU's error as "quota"
+  (seen in scripts/space-check.mjs on 26 Nov), but the page's message for it has not been seen.
+- The page on a real phone; pinch and two-finger moves on a real touch screen (not simulated: d3.zoom's own touch
+  handling).
 
-### Notes
+## Notes
+
+- Where the GPU code lives. Decided for now (Tim, 26 Nov): Modal's stays in dpp-lm-demo (`dpp-lm-sampler`:
+  modal/app.py, modal/ensemble_lib.py, scripts/ensemble_pool.py) with the pools workflow, which reads dpp-lm-demo's
+  data/ensemble/presets.json and commits pools there, so a preset change or new pools must be copied by hand between
+  dpp-lm-demo's data/ensemble/ and data/ here. The second backend, the ZeroGPU Space xtimv/lm-ensemble-demo, is
+  space/ here; space/ensemble_lib.py started as a copy of modal/ensemble_lib.py (at 099e77e) and differs since 26 Nov.
+- The unused copies in dpp-lm-demo stay (Tim, 26 Nov): lab/ensemble*.js, data/ensemble/, tests/ensemble.test.mjs and
+  docs/handoff-ensemble-demo.md. They will drift from the copies here; lab/ensemble.js there still has the explainers'
+  backslash bug (fixed here, see Done).
+- js/explain.js and js/hfauth.js are copies of dpp-lm-demo's (explain.js without the DPP explainers). They differ both
+  ways now: fixes there do not come here, and explain.js here scrolls a long explainer (26 Nov), dpp-lm-demo's does not.
 - The repository was created as timvieira/prompt-intersection and renamed lm-ensemble-demo the same day (Tim);
   https://timvieira.github.io/prompt-intersection/ no longer exists, and nothing should link to it.
-- js/explain.js and js/hfauth.js are copies of dpp-lm-demo's (explain.js without the DPP explainers); fixes there do
-  not come here.
 - On Tim's laptop the `gh` token has no `workflow` scope, so pushes that touch .github/workflows go over SSH
   (or after `gh auth refresh -s workflow`).
 
-### Done (26 Nov)
-- **Explainers fit the window** (26 Nov): a long one (the new proposal explainer is 830 px) scrolls inside its box,
-  and is placed wherever it fits; before, the wide layout (which cannot scroll) cut off its bottom.
-- **The status line comes back** when the settings return to those of the plot shown (26 Nov); it used to keep
-  saying "The plot is from earlier prompts or settings".
+## Decided: the proposal (26 Nov)
+
+- Tim: importance sampling, not SMC. The proposal is a local f-ensemble with its own τ′, weights and T′, reweighted
+  to the global target τ, like the DPP demo's T′ and T.
+- Against the paper (arXiv v1, §5): Def. 5.1 is this sampler, any proposal r with weights φ/r. The paper's own
+  proposal (§5.2, Prop. 5.2, §6) is r ∝ ψ(x′ | x) = f(p⃗_A(x x′), p⃗_B(x x′)) / f(p⃗_A(x), p⃗_B(x)): a local
+  f-ensemble whose weights follow the prefix, ŵ_k(x) ∝ w_k p⃗_k(x)^τ. It equals the fixed-weight one only at τ = 0.
+  At τ = 1 it is exact: the weights are the posterior over the two prompts, and every importance weight is equal.
+- Toy check (scripts/proposal-check.py; two random LMs, 3 symbols, length ≤ 5, one seed). Large-n ESS/n, fixed
+  weights vs ψ:
+
+  | τ | fixed | ψ |
+  |---|---|---|
+  | ≈ min (−8) | 0.59 | 0.61 |
+  | harmonic (−1) | 0.62 | 0.63 |
+  | product (0) | 0.73 | 0.73 |
+  | sum (1) | 0.63 | 1.00 |
+  | ≈ max (8) | 0.58 | 0.95 |
+
+- Tim ("Go"): both weightings, with the paper's ψ weights as the default.
+- The paper has no proposal temperature (App. E: temperature 1.0), so T′ is the demo's own addition.
+
+## Done (26 Nov)
+
+- **The proposal family, on the Space and the page:** `space/ensemble_lib.py` (local_f, proposal_logprobs; schema 3),
+  the Space API `ensemble_pool` (the older `ensemble_sample` maps to the product at T′ = t/2), and the settings ("The
+  proposal: a local ensemble": its weights, τ′, w_A, T′). The ending step is one choice, scored with the mean of each
+  prompt's total ending probability, as for the paper's end symbol; the schema-2 sampler summed it token by token.
+  Checked: tests/test_proposal.py (every step against the definition on an enumerable toy model, to 2.6e-6 in log r;
+  the mixture proposal exact; runs in the Space deploy workflow) and scripts/sampler-check.py (GPT-2 on a CPU: 8
+  proposals, recorded logr, logpA, logpB equal an uncached step-by-step recomputation to 7e-5 nats). Local Space (CPU,
+  GPT-2, 6 draws, sum proposal): ESS 6.0 of 6 at the sum target. Measured on Qwen3 14B: see "Importance weights".
+- **The page's claims about the paper, against the arXiv v1** (the conference version: see Needs Tim): ρ = 0.958 and
+  0.090 (§2) match; α = 1 − τ matches Thm. 4.1; "the paper's main ensemble" overstated it (Fig. 1 uses the product,
+  but §6 evaluates min, product, sum and max side by side, and the consensus-seeking two, min and product, do best).
+  The τ explainer now says the paper's Fig. 1 uses the product, there p_A·p_B without the square root (the same
+  ranking).
+- **Hugging Face sign-in accepts this address** (26 Nov, 14:32). The OAuth app "Diverse sampling demo" (client
+  43d09d55-…; huggingface.co/settings/connected-applications, Developer Applications, Settings) lists
+  https://timvieira.github.io/dpp-lm-demo/, https://timvieira.github.io/lm-ensemble-demo/ and https://timvieira.github.io/,
+  each in its own box (the + button; several in one box are read as one address). Hugging Face matches the address
+  exactly: a parent such as the homepage does not cover the pages under it (checked). Each new demo page that signs in
+  needs its own line.
+- **Sign-in and a run on the Space, from the page, end to end** (Tim's screenshot, 26 Nov 14:38): favorite actor ×
+  favorite author, GPT-2, 200 completions in 9 s, "drawn on the Hugging Face Space".
+- **A second backend, a Hugging Face ZeroGPU Space** (Tim): space/ (app.py, ensemble_lib.py, README.md as the Space
+  card), deployed by .github/workflows/space.yml; js/space.js calls it through Gradio's queue with the visitor's token;
+  "Runs on" in the settings picks Modal or the Space; the Space's errors (quota, not answering, busy) have their own
+  messages, with "Run on Modal". The status line says where a pool was drawn.
+  - The Space is xtimv/lm-ensemble-demo (Tim renamed it; it was created as xtimv/LM-ensemble-demo, which now
+    redirects). Its address, xtimv-lm-ensemble-demo.hf.space (the page's SPACE_URL), did not change.
+  - The deploy token: the repository secret HF_TOKEN is set (Tim); the first deploy uploaded space/ to the Space (its
+    commit b7bb356).
+  - Tested on ZeroGPU through the page's own client (scripts/space-check.mjs, on Tim's quota): the Space built and ran
+    on zero-a10g in about 3 minutes; it offers Qwen3 14B (the unpacked AWQ weights) and GPT-2; Gradio 6.32's queue
+    protocol works with js/space.js. Qwen3 14B text n = 200 at 32 tokens (the page's default) took 17.5 s (9 s
+    sampling, 8 s rescoring). With seed 0 the first Qwen3 completion starts as in the cached Modal pool ("Kip Thorne,
+    and I'm trying to understand...") and then diverges: the same weights on another GPU round differently.
+- **Explainers fit the window:** a long one (the proposal explainer is 830 px) scrolls inside its box, and is placed
+  wherever it fits; before, the wide layout (which cannot scroll) cut off its bottom.
+- **The status line comes back** when the settings return to those of the plot shown; it used to keep saying "The
+  plot is from earlier prompts or settings".
 - **MathJax for every symbol** (Tim, 26 Nov: "use mathjax"; his global rule). MathJax 3.2.2, SVG output
   (tex-svg-full, fontCache local) replaces KaTeX. The page's own text is typeset at start-up, explainers when they open
   (js/explain.js), and the text the page builds (cards, readouts, the τ readout, tooltip, ρ line) gets cached
@@ -202,11 +210,16 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   Checked in headless Chrome at 1600 × 1000 and 390 × 844: no \( \[ $ left in the rendered text, no MathJax errors,
   all 16 explainers clean. If MathJax does not load, the page says so. Not maths: native hover titles and the
   backends' error messages (e.g. "Allowed: 2 ≤ n ≤ 200"), shown as sent.
+- **The explainers' maths was broken in 9 of 16** (since they were written in dpp-lm-demo ad96dde): the TeX sat in
+  JS template literals with single backslashes, so \varphi, \tau, \rho, \frac became control characters and \sum,
+  \mathrm, \hat lost their backslash. Doubled (54 backslashes); rendered cleanly by KaTeX then, and by MathJax now.
 - **Stale text fixed:** the banner now says "Work in progress. This demo is still being built." (it said only the
   example pairs had completions); the sign-in message names the Space when "Runs on" is the Space (it always said
   Modal); code comments name both backends.
-- **Robin Chan has the link** (Tim messaged him himself, 26 Nov).
-- **A local clone** at ~/projects/lm-ensemble-demo on Tim's laptop (Tim, 26 Nov).
+- **The title is "Ensembling Language Models"** (Tim; was "Prompt intersection", which now opens the subtitle). The
+  controls start 10 px under the title block, measured by its bottom edge as on the diversity demo (they overlapped it
+  by 2 px).
+- **Card meta lines** break between fields, never inside one ("log p_A −1.1" stays together).
 - **The diversity demo's full-page layout** (Tim): on wide screens the plot is the page. The title and the controls
   float top left, the ranked rail runs down the right, the readouts (Uses n of N, log Ẑ) and View sit in a bar along
   the bottom. The frame is the open area between them; the grid, the level lines and the diagonal continue under the
@@ -219,8 +232,9 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
     Checked with a DevTools-protocol script outside the repo: headless Chrome's --window-size lays the page out
     87 px shorter than its screenshot and no narrower than ~500 px. This repo has no overflow test like
     dpp-lm-demo's tests/overflow.cjs.
-- **The redirect** from dpp-lm-demo's lab/ensemble.html keeps the query string and fragment (checked live:
-  `?x=1#y` lands on https://timvieira.github.io/lm-ensemble-demo/?x=1#y).
+- **Level lines across the whole window** (Tim): no longer faded with the grid, and continued past the completions'
+  score range at the same spacing (a ninth of that range); at most about 120. Cost: zooming out to 0.33× draws about
+  48 lines and a wheel step takes 50 to 65 ms (was about 20).
 - **Pan and zoom, as on the diversity demo** (its Plot2D; missed in the first port of the layout, Tim asked): the wheel
   or a pinch zooms (0.2× to 50×); Shift-drag, right-drag or two fingers move; double-click returns to the first view;
   a plain drag does nothing. Axes, grid, level lines and the diagonal follow the view; points and labels are clipped
@@ -234,50 +248,34 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   480 px the composer's menus open from its left edge. Checked at dpp-lm-demo's overflow-test widths (320, 360, 390,
   430, 600, 700, 768, 900, 1024, 1280, 1440) and 1100: every menu on screen, nothing cut, no sideways scroll. This repo
   still has no overflow test of its own.
-- **A second backend, a Hugging Face ZeroGPU Space** (Tim): space/ (app.py, a copy of dpp-lm-demo's ensemble_lib.py,
-  README.md as the Space card), deployed by .github/workflows/space.yml; js/space.js calls it through Gradio's queue with
-  the visitor's token; "Runs on" in the settings picks Modal or the Space; the Space's errors (quota, not answering,
-  busy) have their own messages, with "Run on Modal". The status line says where a pool was drawn.
-- **Level lines across the whole window** (Tim, 26 Nov): no longer faded with the grid, and continued past the
-  completions' score range at the same spacing (a ninth of that range); at most about 120. Cost: zooming out to 0.33×
-  draws about 48 lines and a wheel step takes 50 to 65 ms (was about 20).
-- **Sign-in and a run on the Space, from the page, end to end** (Tim's screenshot, 26 Nov 14:38): favorite actor ×
-  favorite author, GPT-2, 200 completions in 9 s, "drawn on the Hugging Face Space".
-- **The title is "Ensembling Language Models"** (Tim, 26 Nov; was "Prompt intersection", which now opens the subtitle). The
-  controls start 10 px under the title block, measured by its bottom edge as on the diversity demo (they overlapped it
-  by 2 px).
-- **Card meta lines** break between fields, never inside one ("log p_A −1.1" stays together).
-- **The explainers' maths was broken in 9 of 16** (since they were written in dpp-lm-demo ad96dde): the TeX sat in
-  JS template literals with single backslashes, so \varphi, \tau, \rho, \frac became control characters and
-  \sum, \mathrm, \hat lost their backslash. Doubled (54 backslashes); KaTeX now renders them with no errors.
-  dpp-lm-demo's copy (lab/ensemble.js) still has the bug.
+- **The redirect** from dpp-lm-demo's lab/ensemble.html keeps the query string and fragment (checked live:
+  `?x=1#y` lands on https://timvieira.github.io/lm-ensemble-demo/?x=1#y).
+- **Robin Chan has the link** (Tim messaged him himself).
+- **A local clone** at ~/projects/lm-ensemble-demo on Tim's laptop (Tim).
 
-## Prototype: the ensemble demo (prompt intersection, arXiv:2603.05432 Fig. 1)
-- Brief: docs/handoff-ensemble-demo.md. Built as an unlinked lab page of dpp-lm-demo (lab/ensemble.html); moved to
-  this repository on 26 Nov.
+## The prototype in dpp-lm-demo (25–26 Nov): decisions and history
+
+- Brief: docs/handoff-ensemble-demo.md (in dpp-lm-demo). Built as an unlinked lab page of dpp-lm-demo
+  (lab/ensemble.html), the ensemble demo of prompt intersection (arXiv:2603.05432 Fig. 1); moved here on 26 Nov.
 - Decided (Tim): Qwen3 14B (the GPU server's model); cached pools for the presets during development
   (data/ensemble/presets.json).
 - No longer waiting on Manuel (was: `/score` and a token-level product sampler on his GPU server, which had neither on
-  26 Nov): the pools and live runs come from Modal and the Hugging Face Space, which both sample the token-level
-  product and score under A, B and C.
+  26 Nov): the pools and live runs come from Modal (the token-level product) and, since 26 Nov, the Hugging Face Space
+  (the proposal family); both score under A, B and C.
 - Done (26 Nov): Qwen3 14B pools for the five presets, drawn on Modal (modal/ensemble_lib.py through the manual
-  "Ensemble prototype pools" workflow; about 15 s of GPU per preset). The token-level product sampler and local
-  scores run there, so the GPU server's missing routes no longer block the prototype. Physicist × author
-  reproduces the paper's direction: against the explicit prompt, ρ = 0.94 global (product) vs 0.77 local.
-- Done: lab/ensemble.html has the composer (prompts A and B, examples, settings, ↑), the τ/K panel with ticks at
-  the named means, a View menu (Scored global/local) and "?" explainers; ↑ on anything but an example pair at
-  its settings says live runs aren't connected yet and offers an example.
-- Open: preset wording. "A famous scientist is" continues as "…coming to our school next week."; better
-  phrasings (e.g. "My favorite scientist is") or a different pair list.
+  "Ensemble prototype pools" workflow; about 15 s of GPU per preset). Physicist × author reproduces the paper's
+  direction: against the explicit prompt, ρ = 0.94 global (product) vs 0.77 local.
+- Done: the composer (prompts A and B, examples, settings, ↑), the τ/K panel with ticks at the named means, a View
+  menu (Scored global/local) and "?" explainers. (↑ then said live runs weren't connected yet; they came the same day.)
 - Decided (Tim): completions are one sentence, with exceptions for non-sentence punctuation. A period ends a
   sentence when the next token starts with whitespace or ends the text, and it is not an abbreviation (Dr., Mr.,
   e.g., U.S., …) or an initial ("J."). The ending event's probability (all such next tokens) is part of every
-  score (modal/ensemble_lib.py, sentence_period). Known trade-off: "Vitamin C." reads as an initial.
+  score. Known trade-off: "Vitamin C." reads as an initial.
 - Decided (Tim): no K and no Sample in the ensemble prototype. The rail ranks every distinct completion by its
   ensemble score (exact), with its probability under the ensemble (φ/Ẑ, Ẑ estimated from the pool); ten shown
   until "Show all"; the five best are red and labelled in the plot.
 - Decided (Tim): pySBD's English rules that need only the next word, adopted as next-token ending sets
-  (modal/ensemble_lib.py, ending_kind and ending_masks): "." and "?" end before whitespace; "!", "..." and
+  (ensemble_lib.py, ending_kind and ending_masks): "." and "?" end before whitespace; "!", "..." and
   sentence-ending abbreviations (Inc., Jr., U.S., Ph.D., …) only before a capital or a new line; No./pp. not
   before a digit; titles, initials, e.g., i.e. never; a new line always ends a completion; closing quotes count.
   Exact except tokens holding text plus a line break (".\n"), scored by their own probability. Not adopted:
@@ -293,13 +291,12 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
 - Decided (Tim): any special or added token ends a completion, in both formats (Qwen3: <|im_end|>,
   <|endoftext|>, <|im_start|>, <think>, tool-call, vision, FIM tokens: 26 in all). The ending set's probability is
   in every score; nothing is blocked or dropped. Each completion records which special token ended it
-  (endToken), to spot e.g. replies that run into <|im_start|>. Before, only <|im_end|>/<|endoftext|> ended one
-  and other special tokens were kept but hidden by decoding.
-- Done: live runs on Modal for the ensemble prototype. /ensemble_sample on the Modal web app (Hugging Face
-  sign-in, the shared daily run limit and monthly GPU budget), two models: Qwen3 14B (the existing L40S
-  container; text and chat formats) and GPT-2 (124M, its own T4 container, charged to the meter at T4 prices;
-  text only). The page offers both in the settings and runs anything not cached; pools are
-  data/ensemble/<pair>.<model>.<format>.json, drawn for both models by the "Ensemble prototype pools" workflow.
-- Done differently: the lab page moved here, and sign-in works from https://timvieira.github.io/lm-ensemble-demo/ (see
-  "Open after the move"). The sign-in is shared with the diversity demo (same site).
-
+  (endToken), to spot e.g. replies that run into <|im_start|>; only Modal's pools still do (see Needs Tim). Before,
+  only <|im_end|>/<|endoftext|> ended one and other special tokens were kept but hidden by decoding.
+- Done: live runs on Modal. /ensemble_sample on the Modal web app (Hugging Face sign-in, the shared daily run limit
+  and monthly GPU budget), two models: Qwen3 14B (the existing L40S container; text and chat formats) and GPT-2
+  (124M, its own T4 container, charged to the meter at T4 prices; text only). The page offers both in the settings
+  and runs anything not cached; pools are data/ensemble/<pair>.<model>.<format>.json, drawn for both models by the
+  "Ensemble prototype pools" workflow.
+- Done differently: the lab page moved here, and sign-in works from https://timvieira.github.io/lm-ensemble-demo/.
+  The sign-in is shared with the diversity demo (same site).

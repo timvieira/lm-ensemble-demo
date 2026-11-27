@@ -123,7 +123,9 @@ LOADED = {k: load(k) for k in MODELS}
 
 def _duration(model, fmt, prompts, n, prop, max_new_tokens, seed):
     """GPU seconds to reserve for one pool: start-up, then sampling (two prompts per step) and scoring (A and B
-    again, and C). Not measured on this Space yet; Modal's L40S takes about 15 s for n = 200, 32 tokens."""
+    again, and C). About 4 times what a run takes: 68 s for n = 200 at 32 tokens, where a run with Qwen3 14B took
+    17 to 21 s, seen from the client (26 Nov). ZeroGPU refused one such run with 91 s of quota left, because it
+    requested 102 s (TODO.md: the GPU time reserved)."""
     return int(min(240, 30 + 0.4 * int(max_new_tokens) * (1 + int(n) // 100)))
 
 
