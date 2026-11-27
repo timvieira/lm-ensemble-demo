@@ -1,8 +1,9 @@
 """Pools for the ensemble ("prompt intersection") prototype: plain PyTorch, no Modal.
 
-This copy (lm-ensemble-demo's space/ensemble_lib.py) has moved on from dpp-lm-demo's modal/ensemble_lib.py: its
-proposal is a family of local f-ensembles (schema 3). dpp-lm-demo's copy, used by Modal and by the cached pools,
-still draws from the token-level product with its ending step summed token by token (schema 2).
+Two copies of this file run: lm-ensemble-demo's space/ensemble_lib.py (the Hugging Face Space) and dpp-lm-demo's
+modal/ensemble_lib.py (Modal). Since 27 Nov 2026 they are the same file; keep them identical. The cached pools in
+lm-ensemble-demo's data/ are older (schema 2: the token-level product only, its ending step summed token by token,
+and a completion that ended normally at exactly max_new_tokens tokens scored differently from the Max-tokens rule).
 
 For prompts A and B (and an optional explicit-intersection prompt C), draw N completions i.i.d. from a proposal r,
 a local f-ensemble of A and B, so the page can reweight them by importance sampling to any global generalised mean
@@ -29,10 +30,14 @@ Recorded for each completion y (the same token ids under every prompt):
     loglocal              Σ_t log normalise(p_A · p_B)(y_t | ...): the local (token-level) product ensemble of the
                           paper's Fig. 1, its ending summed over the ending tokens (unchanged from schema 2)
 
-A completion is one sentence or one line (see "where a completion ends" below: pySBD's English rules that need
-only the next token), or stops at max_new_tokens (then "ended" is false). An ending contributes the probability of
-its whole ending set of next tokens, so every score is the exact probability of the completion ending there. The
-prompts are plain text continued by the model (no chat template), as in the paper's Fig. 1, unless chat=True.
+Each prompt's distribution over completions is the model after three LM → LM transformations: the prompt; the
+ending rules, under which a completion is one sentence or one line (see "where a completion ends" below: pySBD's
+English rules that need only the next token) and any special token ends it; and Max tokens, under which a
+completion that reaches max_new_tokens tokens ends there with probability 1. Each transformed LM has one end
+symbol: ending contributes the probability of its whole ending set of next tokens (1 for the Max-tokens rule), so
+every score is the exact probability of the completion under that LM. The prompts are plain text continued by the
+model (no chat template), as in the paper's Fig. 1, unless chat=True. A record's "end" names the rule that ended
+it: "sentence", "line", "eos" (chat format: the end of the turn, or any special token) or "max".
 """
 import math
 
@@ -266,11 +271,17 @@ def ensemble_sample(tok, model, A, B, n, proposal=None, max_new_tokens=32, seed=
             Bn = min(batch_size, n - len(out))
             acc = {k: torch.zeros(Bn, dtype=torch.float64) for k in ("A", "B", "r", "local")}
             # Text: the sentence rules above. Chat: a reply ends where the model ends its turn.
-            done, kind, end = [False] * Bn, ["eos" if chat else "line"] * Bn, ["max"] * Bn
+            done, kind, end = [False] * Bn, ["eos" if chat else "line"] * Bn, [None] * Bn
             seqs = [[] for _ in range(Bn)]
             pa = pb = None
             sa, sb = ia.repeat(Bn, 1), ib.repeat(Bn, 1)
-            for _ in range(max_new_tokens + 1):
+            for step in range(max_new_tokens + 1):
+                if step == max_new_tokens:
+                    # Max tokens, an ending rule like the others: after max_new_tokens tokens every next token ends
+                    # the completion, so ending has probability 1 under A, B, the local product and the proposal
+                    # (one choice), and adds log 1 = 0 to every score. Nothing is drawn, so no forward pass.
+                    end = ["max" if not d else e for d, e in zip(done, end)]
+                    break
                 ra = model(input_ids=sa, use_cache=True, **{cache_kw: pa})
                 rb = model(input_ids=sb, use_cache=True, **{cache_kw: pb})
                 pa = getattr(ra, "cache", None) or ra.past_key_values
@@ -301,9 +312,6 @@ def ensemble_sample(tok, model, A, B, n, proposal=None, max_new_tokens=32, seed=
                             acc[k][b] += endp[k][b]
                         done[b], end[b] = True, kind[b]
                         continue
-                    if len(seqs[b]) >= max_new_tokens:
-                        done[b] = True                                   # cut off ("max")
-                        continue
                     for k in acc:
                         acc[k][b] += tokp[k][b]
                     seqs[b].append(nl[b])
@@ -322,7 +330,7 @@ def ensemble_sample(tok, model, A, B, n, proposal=None, max_new_tokens=32, seed=
                     "ids": seqs[b], "endKind": end[b] if end[b] in KINDS else None,
                     "text": _cut_line(text) if end[b] == "token" else text,
                     "logpA": acc["A"][b], "logpB": acc["B"][b], "logr": acc["r"][b], "loglocal": acc["local"][b],
-                    "nTokens": len(seqs[b]), "ended": end[b] != "max",
+                    "nTokens": len(seqs[b]),
                     "end": {"any": "sentence", "upper": "sentence", "nodigit": "sentence", "line": "line",
                             "token": "line", "eos": "eos", "max": "max"}[end[b]],
                 })

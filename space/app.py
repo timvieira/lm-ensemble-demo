@@ -5,10 +5,10 @@ N completions i.i.d. from a proposal, a local f-ensemble of prompts A and B with
 (schema 3). The page (https://timvieira.github.io/lm-ensemble-demo/) calls the API "ensemble_pool" with the
 visitor's Hugging Face sign-in, so ZeroGPU charges the visitor's own daily GPU quota.
 
-ensemble_lib.py started as a copy of dpp-lm-demo's modal/ensemble_lib.py, the Modal backend's, and has moved on:
-Modal still draws from the token-level product only (schema 2). The older API "ensemble_sample" (the Modal
-backend's arguments) stays for pages loaded before the change (26 Nov 2026): it draws from the product at T' = t_prime / 2,
-which is Modal's (p_A p_B)^(1/t_prime) token by token, but with the ending step as one choice (schema 3).
+ensemble_lib.py is the same file as dpp-lm-demo's modal/ensemble_lib.py, the Modal backend's (since 27 Nov 2026).
+The older API "ensemble_sample" (the Modal backend's older arguments) stays for pages loaded before 26 Nov 2026: it
+draws from the product at T' = t_prime / 2, which is the earlier (p_A p_B)^(1/t_prime) token by token, but with the
+ending step as one choice (schema 3).
 
 On ZeroGPU it serves Qwen3 14B (the AWQ checkpoint unpacked to fp16, exactly its 4-bit weights, as on Modal and in
 the cached pools) and GPT-2. Anywhere else (a CPU, for testing) it serves GPT-2 and Qwen3 0.6B under its own name:
@@ -189,7 +189,7 @@ def sample_pool(model: str, fmt: str, A: str, B: str, C: str = "", n: float = 20
 
 def ensemble_sample(model: str, fmt: str, A: str, B: str, C: str = "", n: float = 200, t_prime: float = 1.0,
                     max_new_tokens: float = 32, seed: float = -1):
-    """The older API "ensemble_sample" (the Modal backend's arguments): the product proposal with equal weights at
+    """The older API "ensemble_sample" (the Modal backend's older arguments): the product proposal with equal weights at
     T' = t_prime / 2, i.e. (p_A p_B)^(1/t_prime) token by token, the ending step as one choice. For pages opened
     before the change (26 Nov 2026)."""
     if t_prime is None or not (0.2 <= float(t_prime) <= 2.0):

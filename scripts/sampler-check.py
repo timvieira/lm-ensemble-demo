@@ -31,7 +31,7 @@ def recompute(ids, end, prop):
     LA = LB = R = 0.0
     with torch.no_grad():
         for t in range(len(ids) + 1):
-            if t == len(ids) and end in ("max", "token"):   # cut off, or ended by a token with a line break
+            if t == len(ids) and end in ("max", "token"):   # Max tokens (the end has probability 1), or ".\n"
                 break
             la = torch.log_softmax(model(input_ids=torch.tensor([ha + ids[:t]])).logits[0, -1].float(), -1)[None]
             lb = torch.log_softmax(model(input_ids=torch.tensor([hb + ids[:t]])).logits[0, -1].float(), -1)[None]
@@ -63,7 +63,7 @@ for p in ({"tau": 0.0, "wA": 0.5, "weights": "prefix", "Tprime": 1.0},
     S = ensemble_sample(tok, model, A, B, 6, prop, max_new_tokens=12, seed=3, batch_size=3)
     err = 0.0
     for s in S:
-        how = "max" if not s["ended"] else ("token" if s["endKind"] is None else "choice")   # endKind None: ".\n"
+        how = "max" if s["end"] == "max" else ("token" if s["endKind"] is None else "choice")   # endKind None: ".\n"
         R, LA, LB = recompute(s["ids"], how, prop)
         err = max(err, abs(R - s["logr"]), abs(LA - s["logpA"]), abs(LB - s["logpB"]))
     ends = sorted({s["end"] for s in S})

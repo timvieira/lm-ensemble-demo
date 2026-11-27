@@ -27,7 +27,9 @@ function checkPool(pool, N, what, withC = true) {
     for (const k of ['logpA', 'logpB', 'logr', 'loglocal', ...(withC ? ['logpC'] : [])]) {
       if (!Number.isFinite(s[k]) || s[k] > 1e-9) die(`${what}, sample ${i}: ${k} = ${s[k]} is not a finite log-probability`);
     }
-    if (typeof s.text !== 'string' || typeof s.ended !== 'boolean') die(`${what}, sample ${i}: text or ended missing`);
+    if (typeof s.text !== 'string' || !['sentence', 'line', 'eos', 'max'].includes(s.end)) die(`${what}, sample ${i}: text or end missing`);
+    if ('ended' in s) die(`${what}, sample ${i}: has the schema-2 field ended`);
+    if (s.end === 'max' && s.nTokens !== pool.maxNewTokens) die(`${what}, sample ${i}: ended by Max tokens at ${s.nTokens} tokens`);
   }
 }
 

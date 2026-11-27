@@ -6,7 +6,7 @@ name: Deploy the Hugging Face Space
 on:
   push:
     branches: [main]
-    paths: ['space/**', 'tests/test_proposal.py', '.github/workflows/space.yml']
+    paths: ['space/**', 'tests/test_proposal.py', 'tests/test_sampler_toy.py', '.github/workflows/space.yml']
   workflow_dispatch:
 
 concurrency:
@@ -27,6 +27,7 @@ jobs:
         run: |
           pip install numpy torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
           python tests/test_proposal.py
+          python tests/test_sampler_toy.py
       - run: pip install "huggingface_hub>=1.0"
       - name: Upload space/ to the Space
         env:
