@@ -108,6 +108,15 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
     With τ′ = τ (bold), every target goes from 1 to 5 of 200 to between 33 and 200. Sum with ψ weights is exact
     (200.0), against 53.3 with fixed weights. Max with fixed weights was not run: Tim's ZeroGPU quota ran out
     ("102s requested vs. 91s left", resets about 17 h later). Script: scripts/space-check.mjs.
+    Where the gain comes from (27 Nov): that comparison mixes two changes, T′ = ½ → 1 and τ′ = τ. The product row
+    changes only T′, and it already lifts min and harmonic to 25.8 and 30.2; the earlier sampler at the same T′
+    gave 24.9 and 28.7 (the 26 Nov experiment above). Matching τ′ adds about a third on top (33.2, 37.0), which
+    may be within one pool's noise (unmeasured). Matching τ′ is decisive for sum and max (24 → 200 and 194), where
+    the ψ weights make the proposal exact or nearly so. Why min and harmonic stay near 17%: with ψ weights and
+    T′ = 1, a draw's importance weight is the product of its per-step normalisers Σ_{x′} ψ(x′ | x), which are 1 at
+    every step only at τ = 1 (otherwise only where the two prompts agree on the next token); no local proposal
+    removes that spread (the paper's SMC resamples on exactly these).
+    Open: repeat with several seeds before reading anything into 26 vs 33.
   - **Open, needs Tim: Modal.** Modal (dpp-lm-demo's modal/ensemble_lib.py) still runs the schema-2 sampler. The
     page sends Modal only τ′ = product, w_A = ½, T′ ≤ 1 (its t_prime = 2T′) and otherwise offers the Space. Porting
     the sampler there changes code shared with the DPP demo's app.
