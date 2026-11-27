@@ -92,6 +92,22 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
     to 2.6e-6 in log r; the mixture proposal exact; runs in the Space deploy workflow) and
     scripts/sampler-check.py (GPT-2 on a CPU: 8 proposals, recorded logr, logpA, logpB equal an uncached step-by-step
     recomputation to 7e-5 nats). Local Space (CPU, GPT-2, 6 draws, sum proposal): ESS 6.0 of 6 at the sum target.
+  - **Measured on ZeroGPU (26 Nov, ~21:20):** Qwen3 14B, physicist × author, text, N = 200, seed 0, T′ = 1, w_A = ½;
+    one pool per proposal, so the numbers are noisy. ESS at each target:
+
+    | proposal | min | harmonic | product | sum | max | distinct |
+    |---|---|---|---|---|---|---|
+    | cached pool (product, T′ = ½, earlier sampler) | 4.7 | 4.9 | 1.6 | 1.0 | 1.0 | 84 |
+    | product | 25.8 | 30.2 | **61.3** | 24.1 | 23.6 | 177 |
+    | min, ψ weights | **33.2** | 33.4 | 16.8 | 4.2 | 4.2 | 181 |
+    | harmonic, ψ weights | 33.5 | **37.0** | 20.1 | 5.8 | 5.7 | 182 |
+    | sum, ψ weights | 3.7 | 4.7 | 20.0 | **200.0** | 199.6 | 156 |
+    | max, ψ weights | 2.2 | 3.0 | 11.1 | 192.5 | **194.5** | 148 |
+    | sum, fixed weights | 8.9 | 11.9 | 32.1 | 53.3 | 52.6 | 169 |
+
+    With τ′ = τ (bold), every target goes from 1 to 5 of 200 to between 33 and 200. Sum with ψ weights is exact
+    (200.0), against 53.3 with fixed weights. Max with fixed weights was not run: Tim's ZeroGPU quota ran out
+    ("102s requested vs. 91s left", resets about 17 h later). Script: scripts/space-check.mjs.
   - **Open, needs Tim: Modal.** Modal (dpp-lm-demo's modal/ensemble_lib.py) still runs the schema-2 sampler. The
     page sends Modal only τ′ = product, w_A = ½, T′ ≤ 1 (its t_prime = 2T′) and otherwise offers the Space. Porting
     the sampler there changes code shared with the DPP demo's app.
@@ -139,7 +155,8 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   32 tokens (the page's default) in 17.5 s (9 s sampling, 8 s rescoring). With seed 0 the first Qwen3 completion
   starts as in the cached Modal pool ("Kip Thorne, and I'm trying to understand...") and then diverges: the same
   weights on another GPU round differently.
-- **The self-check differs by up to 0.11 nats on ZeroGPU** (sampling sums against teacher-forced scores, both in fp16:
+- **The self-check differs by up to 0.11 nats on ZeroGPU** (0.13 in the proposal runs of 26 Nov: τ′ = min, Qwen3
+  14B text; the code it checks did not change) (sampling sums against teacher-forced scores, both in fp16:
   0.049 text, 0.106 chat, 0.073 text at n = 200). The record reports it as checkMaxAbsErr; nothing here filters on it.
   dpp-lm-demo's pools workflow fails a pool above 0.5 nats and reports 0.09 seen on Modal. The page uses the sampling
   sums (logpA, logpB).
