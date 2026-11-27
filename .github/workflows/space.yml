@@ -6,7 +6,7 @@ name: Deploy the Hugging Face Space
 on:
   push:
     branches: [main]
-    paths: ['space/**', '.github/workflows/space.yml']
+    paths: ['space/**', 'tests/test_proposal.py', '.github/workflows/space.yml']
   workflow_dispatch:
 
 concurrency:
@@ -23,6 +23,10 @@ jobs:
           python-version: '3.12'
       - name: The Space's code compiles
         run: python -m py_compile space/app.py space/ensemble_lib.py
+      - name: The proposal against its definition (a toy model; CPU torch)
+        run: |
+          pip install numpy torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+          python tests/test_proposal.py
       - run: pip install "huggingface_hub>=1.0"
       - name: Upload space/ to the Space
         env:

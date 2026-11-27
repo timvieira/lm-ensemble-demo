@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { logsumexp, logGenMean, tauOf, uOf, summarize, spearman } from '../js/ensemble-math.js';
+import { logsumexp, logGenMean, tauOf, uOf, summarize, spearman, parseTau, tauParam } from '../js/ensemble-math.js';
 
 const close = (a, b, tol = 1e-9) => assert.ok(Math.abs(a - b) <= tol * Math.max(1, Math.abs(b)), `${a} vs ${b}`);
 
@@ -48,4 +48,12 @@ test('spearman: perfect, reversed, ties', () => {
   close(spearman([1, 2, 3, 4], [10, 20, 30, 40]), 1);
   close(spearman([1, 2, 3, 4], [4, 3, 2, 1]), -1);
   close(spearman([1, 1, 2, 3], [5, 5, 6, 7]), 1);
+});
+
+test('the proposal τ′ as typed', () => {
+  assert.equal(parseTau('min'), -Infinity); assert.equal(parseTau(' Product '), 0); assert.equal(parseTau('max'), Infinity);
+  assert.equal(parseTau('−∞'), -Infinity); assert.equal(parseTau('inf'), Infinity); assert.equal(parseTau('-1'), -1);
+  assert.equal(parseTau('2.5'), 2.5); assert.equal(parseTau('.5'), 0.5); assert.equal(parseTau('1e2'), 100);
+  for (const bad of ['', 'abc', '1e9', 'NaN', '1-', '0x10']) assert.ok(Number.isNaN(parseTau(bad)), bad);
+  for (const t of [-Infinity, -1, 0, 0.25, 2, Infinity]) assert.equal(parseTau(tauParam(t)), t);
 });

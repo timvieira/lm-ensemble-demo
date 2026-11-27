@@ -1,10 +1,14 @@
 """GPU backend for the ensemble demo ("prompt intersection"), a Hugging Face ZeroGPU Space.
 
-N completions i.i.d. from the token-level product of prompts A and B, each scored under A, B and (if given) C:
-the pool record of ensemble_lib.py, the same record as the Modal backend's /ensemble_sample (dpp-lm-demo's
-modal/app.py; ensemble_lib.py is a copy of its modal/ensemble_lib.py). The page
-(https://timvieira.github.io/lm-ensemble-demo/) calls it with the visitor's Hugging Face sign-in, so ZeroGPU
-charges the visitor's own daily GPU quota.
+N completions i.i.d. from a proposal, a local f-ensemble of prompts A and B with its own τ', w_A, weights and T'
+(ensemble_lib.py's module docstring), each scored under A, B and (if given) C: the pool record of ensemble_lib.py
+(schema 3). The page (https://timvieira.github.io/lm-ensemble-demo/) calls the API "ensemble_pool" with the
+visitor's Hugging Face sign-in, so ZeroGPU charges the visitor's own daily GPU quota.
+
+ensemble_lib.py started as a copy of dpp-lm-demo's modal/ensemble_lib.py, the Modal backend's, and has moved on:
+Modal still draws from the token-level product only (schema 2). The older API "ensemble_sample" (the Modal
+backend's arguments) stays for pages loaded before the change (26 Nov 2026): it draws from the product at T' = t_prime / 2,
+which is Modal's (p_A p_B)^(1/t_prime) token by token, but with the ending step as one choice (schema 3).
 
 On ZeroGPU it serves Qwen3 14B (the AWQ checkpoint unpacked to fp16, exactly its 4-bit weights, as on Modal and in
 the cached pools) and GPT-2. Anywhere else (a CPU, for testing) it serves GPT-2 and Qwen3 0.6B under its own name:
@@ -23,7 +27,7 @@ import gradio as gr
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from ensemble_lib import ensemble_pool
+from ensemble_lib import check_proposal, ensemble_pool, tau_json
 
 try:  # the spaces package knows whether this Space runs on ZeroGPU
     from spaces.config import Config as _SpacesConfig
@@ -117,7 +121,7 @@ def load(key):
 LOADED = {k: load(k) for k in MODELS}
 
 
-def _duration(model, fmt, prompts, n, t_prime, max_new_tokens, seed):
+def _duration(model, fmt, prompts, n, prop, max_new_tokens, seed):
     """GPU seconds to reserve for one pool: start-up, then sampling (two prompts per step) and scoring (A and B
     again, and C). Not measured on this Space yet; Modal's L40S takes about 15 s for n = 200, 32 tokens."""
     return int(min(240, 30 + 0.4 * int(max_new_tokens) * (1 + int(n) // 100)))
@@ -131,10 +135,10 @@ else:
 
 
 @gpu
-def run(model, fmt, prompts, n, t_prime, max_new_tokens, seed):
+def run(model, fmt, prompts, n, prop, max_new_tokens, seed):
     tok, m = LOADED[model]
     preset = {"id": "custom", "label": "", fmt: prompts}
-    return ensemble_pool(tok, m, preset, fmt, n=n, t_prime=t_prime, max_new_tokens=max_new_tokens, seed=seed,
+    return ensemble_pool(tok, m, preset, fmt, n=n, proposal=prop, max_new_tokens=max_new_tokens, seed=seed,
                          model_name=MODELS[model][0])
 
 
@@ -145,10 +149,11 @@ def _as_gr_error(e):
     return gr.Error(f"server: {type(e).__name__}: {e}")
 
 
-def ensemble_sample(model: str, fmt: str, A: str, B: str, C: str = "", n: float = 200, t_prime: float = 1.0,
-                    max_new_tokens: float = 32, seed: float = -1):
-    """N completions from the token-level product of prompts A and B, scored under A, B and (if given) C.
-    The arguments and the checks are those of the Modal backend's /ensemble_sample; seed < 0 draws one.
+def sample_pool(model: str, fmt: str, A: str, B: str, C: str = "", n: float = 200, tau: str = "0",
+                wA: float = 0.5, weights: str = "prefix", t_prime: float = 1.0, max_new_tokens: float = 32,
+                seed: float = -1):
+    """The API "ensemble_pool": N completions from the proposal (τ' = tau, as a number or "inf", "-inf" or a name;
+    w_A = wA; weights "prefix" or "fixed"; T' = t_prime), scored under A, B and (if given) C. seed < 0 draws one.
     Errors start with a code ("bad_request: …", "server: …") so the page can explain them."""
     model, fmt = (model or "").strip(), (fmt or "text").strip()
     if model not in MODELS:
@@ -158,20 +163,36 @@ def ensemble_sample(model: str, fmt: str, A: str, B: str, C: str = "", n: float 
     prompts = {k: (v or "").strip() for k, v in (("A", A), ("B", B), ("C", C)) if (v or "").strip()}
     if "A" not in prompts or "B" not in prompts or any(len(v) > MAX_PROMPT for v in prompts.values()):
         raise gr.Error(f"bad_request: Prompts A and B are needed, each at most {MAX_PROMPT} characters (C is optional).")
-    if None in (n, t_prime, max_new_tokens) or n != int(n) or max_new_tokens != int(max_new_tokens):
-        raise gr.Error("bad_request: n and max_new_tokens must be whole numbers; t_prime must be a number.")
-    n, max_new_tokens, t_prime = int(n), int(max_new_tokens), float(t_prime)
-    if not (2 <= n <= MAX_N and 8 <= max_new_tokens <= MAX_TOKENS and 0.2 <= t_prime <= 2.0):
-        raise gr.Error(f"bad_request: Allowed: 2 ≤ n ≤ {MAX_N}, 8 ≤ max_new_tokens ≤ {MAX_TOKENS}, 0.2 ≤ t_prime ≤ 2.")
-    seed = random.randrange(2**31) if seed is None or seed < 0 else int(seed)
-    print(f"ensemble run: {model} {fmt} n={n} T'={t_prime} max={max_new_tokens}", flush=True)
+    if None in (n, wA, t_prime, max_new_tokens) or n != int(n) or max_new_tokens != int(max_new_tokens):
+        raise gr.Error("bad_request: n and max_new_tokens must be whole numbers; wA and t_prime must be numbers.")
+    n, max_new_tokens = int(n), int(max_new_tokens)
     try:
-        return run(model, fmt, prompts, n, t_prime, max_new_tokens, seed)
+        prop = check_proposal({"tau": tau if tau not in (None, "") else "0", "wA": wA, "weights": (weights or "").strip(),
+                               "Tprime": t_prime})
+    except ValueError as e:
+        raise gr.Error(f"bad_request: {e}.")
+    if not (2 <= n <= MAX_N and 8 <= max_new_tokens <= MAX_TOKENS and 0.1 <= prop["Tprime"] <= 2.0):
+        raise gr.Error(f"bad_request: Allowed: 2 ≤ n ≤ {MAX_N}, 8 ≤ max_new_tokens ≤ {MAX_TOKENS}, 0.1 ≤ T′ ≤ 2.")
+    seed = random.randrange(2**31) if seed is None or seed < 0 else int(seed)
+    print(f"ensemble run: {model} {fmt} n={n} tau'={tau_json(prop['tau'])} wA={prop['wA']} {prop['weights']} "
+          f"T'={prop['Tprime']} max={max_new_tokens}", flush=True)
+    try:
+        return run(model, fmt, prompts, n, prop, max_new_tokens, seed)
     except gr.Error:
         raise
     except Exception as e:  # pass the reason on to API callers instead of a bare "error"
-        print(f"ensemble_sample failed: {type(e).__name__}: {e}", flush=True)
+        print(f"ensemble run failed: {type(e).__name__}: {e}", flush=True)
         raise _as_gr_error(e)
+
+
+def ensemble_sample(model: str, fmt: str, A: str, B: str, C: str = "", n: float = 200, t_prime: float = 1.0,
+                    max_new_tokens: float = 32, seed: float = -1):
+    """The older API "ensemble_sample" (the Modal backend's arguments): the product proposal with equal weights at
+    T' = t_prime / 2, i.e. (p_A p_B)^(1/t_prime) token by token, the ending step as one choice. For pages opened
+    before the change (26 Nov 2026)."""
+    if t_prime is None or not (0.2 <= float(t_prime) <= 2.0):
+        raise gr.Error("bad_request: Allowed: 0.2 ≤ t_prime ≤ 2.")
+    return sample_pool(model, fmt, A, B, C, n, "0", 0.5, "fixed", float(t_prime) / 2, max_new_tokens, seed)
 
 
 def models():
@@ -181,7 +202,7 @@ def models():
 
 with gr.Blocks(title="LM ensemble demo backend") as demo:
     gr.Markdown("Backend for the [prompt-intersection demo](https://timvieira.github.io/lm-ensemble-demo/): "
-                "completions from the token-level product of two prompts, with exact log-probabilities, as JSON.")
+                "completions drawn from a local ensemble of two prompts, with exact log-probabilities, as JSON.")
     with gr.Row():
         model = gr.Dropdown(choices=list(MODELS), value=next(iter(MODELS)), label="Model")
         fmt = gr.Dropdown(choices=["text", "chat"], value="text", label="Prompt format")
@@ -190,20 +211,27 @@ with gr.Blocks(title="LM ensemble demo backend") as demo:
         B = gr.Textbox(label="Prompt B", value="My favorite author is")
         C = gr.Textbox(label="Prompt C (optional, for checking)", value="My favorite physicist and author is")
     with gr.Row():
+        tau = gr.Textbox(value="product", label="Proposal τ′ (a number, -inf, inf, or min/harmonic/product/sum/max)")
+        wA = gr.Slider(0.0, 1.0, value=0.5, step=0.05, label="Weight of A, w_A")
+        weights = gr.Dropdown(choices=["prefix", "fixed"], value="prefix", label="Weights (prefix: the paper's)")
+        t_prime = gr.Slider(0.1, 2.0, value=1.0, step=0.1, label="Temperature T′")
+    with gr.Row():
         n = gr.Slider(2, MAX_N, value=20, step=1, label="Samples")
-        t_prime = gr.Slider(0.2, 2.0, value=1.0, step=0.1, label="Temperature T′")
         max_new = gr.Slider(8, MAX_TOKENS, value=32, step=8, label="Max tokens")
         seed = gr.Number(value=0, precision=0, label="Seed (< 0: random)")
     out = gr.JSON(label="Pool")
     # The UI button has a name of its own: the page looks the API up by name and must not find this one.
-    gr.Button("Sample").click(ensemble_sample, [model, fmt, A, B, C, n, t_prime, max_new, seed], out,
-                              api_name="ensemble_sample_ui", api_visibility="private")
-    # The API takes free text and unbounded numbers so that ensemble_sample, not the dropdowns and sliders, refuses
+    gr.Button("Sample").click(sample_pool, [model, fmt, A, B, C, n, tau, wA, weights, t_prime, max_new, seed], out,
+                              api_name="ensemble_pool_ui", api_visibility="private")
+    # The API takes free text and unbounded numbers so that sample_pool, not the dropdowns and sliders, refuses
     # what is outside the limits, with a "bad_request: …" message (their own validation errors have no code).
-    model_api, fmt_api = gr.Textbox(visible=False), gr.Textbox(visible=False)
-    n_api, t_api, max_api, seed_api = (gr.Number(visible=False) for _ in range(4))
-    gr.Button("Sample (API)", visible=False).click(ensemble_sample, [model_api, fmt_api, A, B, C, n_api, t_api, max_api, seed_api],
-                                                   out, api_name="ensemble_sample")
+    model_api, fmt_api, tau_api, weights_api = (gr.Textbox(visible=False) for _ in range(4))
+    n_api, wA_api, t_api, max_api, seed_api = (gr.Number(visible=False) for _ in range(5))
+    gr.Button("Pool (API)", visible=False).click(
+        sample_pool, [model_api, fmt_api, A, B, C, n_api, tau_api, wA_api, weights_api, t_api, max_api, seed_api],
+        out, api_name="ensemble_pool")
+    gr.Button("Sample (older API)", visible=False).click(
+        ensemble_sample, [model_api, fmt_api, A, B, C, n_api, t_api, max_api, seed_api], out, api_name="ensemble_sample")
     gr.Button("List models", visible=False).click(models, None, out, api_name="models")
 
 if __name__ == "__main__":

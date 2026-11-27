@@ -1,9 +1,10 @@
 // Prompt intersection: a prototype for "Ensembling Language Models with SMC" (arXiv:2603.05432, Fig. 1).
 // Brief: docs/handoff-ensemble-demo.md. Cached pools: data/<pair>.<model>.<format>.json. Live runs: the dpp-lm-demo
-// Modal app's /ensemble_sample (modal/app.py there) or the Hugging Face Space (space/app.py here, called by
-// js/space.js); all made by the same pool code (ensemble_lib.py, one copy in each repository).
+// Modal app's /ensemble_sample (modal/app.py there) or the Hugging Face Space's "ensemble_pool" (space/app.py here,
+// called by js/space.js). The Space's sampler (space/ensemble_lib.py, schema 3) draws from any local f-ensemble; Modal's
+// and the cached pools' (dpp-lm-demo's modal/ensemble_lib.py, schema 2) from the token-level product only.
 import * as d3 from 'd3';
-import { logGenMean, tauOf, uOf, tauName, NAMED, summarize, spearman } from './ensemble-math.js';
+import { logGenMean, tauOf, uOf, tauName, NAMED, summarize, spearman, parseTau, tauParam } from './ensemble-math.js';
 import { EXPLAIN, initExplainers } from './explain.js';
 import { getAuth, signIn, signOut, finishSignIn } from './hfauth.js';
 import { callSpace } from './space.js';
@@ -106,6 +107,9 @@ const MODAL_URL = 'https://timvieira--dpp-lm-sampler-web.modal.run';
 // Hugging Face GPU quota. Same weights and the same pool code (space/ensemble_lib.py) as Modal.
 const SPACE_URL = 'https://xtimv-lm-ensemble-demo.hf.space';
 const BACKENDS = { modal: { short: '', on: 'Modal', drawn: 'Modal' }, space: { short: ' · HF Space', on: 'the Hugging Face Space, on your GPU quota', drawn: 'the Hugging Face Space' } };
+// Modal runs the earlier sampler: the product with equal weights, (p_A p_B)^(1/t) token by token, which is T' = t/2
+// here, for 0.2 ≤ t ≤ 2. Every other proposal needs the Space.
+const modalCan = (c) => c.ptau === 0 && c.pw === 0.5 && c.Tprime >= 0.1 && c.Tprime <= 1;
 const pbackend = () => $('#backend').value;
 const pmodel = () => $('#model').value;
 const pfmt = () => $('#fmt').value;   // the prompt format
@@ -142,35 +146,51 @@ function setFormat() {
   keepExample(c, was);
   settingsChanged();
 }
-const DEFAULTS = { N: 200, Tprime: 1.0, maxNewTokens: 32 };
+// The defaults are the cached pools' settings: the product with equal weights at T' = ½, which is p_A · p_B token by
+// token (drawn by the earlier sampler; see the "proposal" explainer).
+const DEFAULTS = { N: 200, ptau: 0, pw: 0.5, Tprime: 0.5, maxNewTokens: 32 };
+const r2 = (x) => Math.round(100 * x) / 100;
 function fill(p) { const q = p[pfmt()]; $('#pa').value = q.A; $('#pb').value = q.B; $('#pc').value = q.C ?? ''; syncGo(); }
 function readConfig() {
+  const ptauText = $('#ptau').value.trim(), num = (id) => ($(id).value.trim() === '' ? NaN : +$(id).value);
   return { model: pmodel(), fmt: pfmt(), A: $('#pa').value.trim(), B: $('#pb').value.trim(), C: $('#pc').value.trim(),
-    N: Math.round(+$('#n').value), Tprime: Math.round(10 * +$('#tp').value) / 10, maxNewTokens: Math.round(+$('#maxtok').value),
-    backend: pbackend() };
+    N: Math.round(+$('#n').value), maxNewTokens: Math.round(+$('#maxtok').value), backend: pbackend(),
+    // The proposal (space/ensemble_lib.py): τ′ as typed and parsed, w_A, how the weights move, T′.
+    pweights: $('#proposal').value, ptauText, ptau: parseTau(ptauText), pw: r2(num('#pw')), Tprime: r2(num('#tp')) };
 }
+const bad = (c) => ({ ptau: Number.isNaN(c.ptau), pw: !(c.pw >= 0 && c.pw <= 1), tp: !(c.Tprime >= 0.1 && c.Tprime <= 2) });
 function restore(c) {
   $('#model').value = c.model; syncModel(); $('#fmt').value = c.fmt; fillExamples();
   if (BACKENDS[c.backend]) $('#backend').value = c.backend;
   $('#pa').value = c.A; $('#pb').value = c.B; $('#pc').value = c.C;
-  $('#n').value = c.N; $('#tp').value = c.Tprime.toFixed(1); $('#maxtok').value = c.maxNewTokens;
+  $('#n').value = c.N; $('#maxtok').value = c.maxNewTokens;
+  if (c.ptauText != null) { $('#ptau').value = c.ptauText; $('#pw').value = c.pw; $('#proposal').value = c.pweights; $('#tp').value = c.Tprime; }
   syncGo();
 }
 function cachedFor(c) {
   const p = S.presets.find((x) => x[c.fmt].A === c.A && x[c.fmt].B === c.B);
-  const same = c.N === DEFAULTS.N && c.Tprime === DEFAULTS.Tprime && c.maxNewTokens === DEFAULTS.maxNewTokens;
+  const same = c.N === DEFAULTS.N && c.maxNewTokens === DEFAULTS.maxNewTokens
+    && c.ptau === DEFAULTS.ptau && c.pw === DEFAULTS.pw && c.Tprime === DEFAULTS.Tprime;
   return p && same && (!c.C || c.C === p[c.fmt].C) ? p : null;
 }
 const poolKey = (p, c) => `${p.id}.${c.model}.${c.fmt}`;
-const runKey = (c) => JSON.stringify([c.model, c.fmt, c.A, c.B, c.C, c.N, c.Tprime, c.maxNewTokens, c.backend]);
+// The proposal, canonical: how the weights move makes no difference for the product, or for one prompt alone.
+const propKey = (c) => [tauParam(c.ptau), c.pw, c.ptau === 0 || c.pw === 0 || c.pw === 1 ? 'same' : c.pweights, c.Tprime];
+const runKey = (c) => JSON.stringify([c.model, c.fmt, c.A, c.B, c.C, c.N, ...propKey(c), c.maxNewTokens, c.backend]);
 const RUNS = new Map();   // this visit's live runs, by their settings
-function syncGo() { $('#go').disabled = !($('#pa').value.trim() && $('#pb').value.trim()); $('#adv-sum').textContent = `${MODELS[pmodel()].label} · ${$('#n').value} samples${BACKENDS[pbackend()].short}`; }
+function syncGo() {
+  const c = readConfig(), b = bad(c);
+  for (const [k, id] of [['ptau', '#ptau'], ['pw', '#pw'], ['tp', '#tp']]) $(id).setAttribute('aria-invalid', String(b[k]));
+  $('#go').disabled = !(c.A && c.B && !b.ptau && !b.pw && !b.tp);
+  $('#adv-sum').textContent = `${MODELS[pmodel()].label} · ${$('#n').value} samples${BACKENDS[pbackend()].short}`;
+}
 async function settingsChanged() {
   syncGo();
   const c = readConfig(), p = cachedFor(c);
   if (p) {
     const k = poolKey(p, c);
-    if (S.poolKey === k || await load(k)) { stageMsg(null); return; }
+    if (S.poolKey === k) { setStatus(S.poolStatus); stageMsg(null); return; }   // back to the pool on show
+    if (await load(k)) { stageMsg(null); return; }
   }
   if (RUNS.has(runKey(c))) { show(RUNS.get(runKey(c)), runKey(c), 'Your run', BACKENDS[c.backend].drawn); stageMsg(null); return; }
   if (S.pool) setStatus('The plot is from earlier prompts or settings. Press ↑.');
@@ -187,6 +207,13 @@ async function run() {
   const p = cachedFor(c);
   if (p && (S.poolKey === poolKey(p, c) || await load(poolKey(p, c)))) { stageMsg(null); return; }
   if (RUNS.has(runKey(c))) { show(RUNS.get(runKey(c)), runKey(c), 'Your run', BACKENDS[c.backend].drawn); stageMsg(null); return; }
+  if (Object.values(bad(c)).some(Boolean)) return;
+  if (c.backend === 'modal' && !modalCan(c)) {
+    stageMsg({ title: 'Modal draws only from the product with equal weights.',
+      detail: `It runs the earlier sampler: ${tex("\\tau' = 0")}, ${tex('w_A = 0.5')} and ${tex("T' \\le 1")}. Other proposals run on the Hugging Face Space, on your own Hugging Face GPU quota.`,
+      actions: '<button type="button" class="btn" data-act="use-space">Run on the Space</button>' });
+    return;
+  }
   const auth = getAuth();
   if (!auth) {
     stageMsg({ title: 'Running new prompts needs a free Hugging Face account.',
@@ -208,7 +235,8 @@ async function run() {
     let out;
     if (c.backend === 'space') {
       // seed -1: the Space draws one, as Modal does when none is sent.
-      out = await callSpace(SPACE_URL, 'ensemble_sample', [c.model, c.fmt, c.A, c.B, c.C, c.N, c.Tprime, c.maxNewTokens, -1],
+      out = await callSpace(SPACE_URL, 'ensemble_pool',
+        [c.model, c.fmt, c.A, c.B, c.C, c.N, tauParam(c.ptau), c.pw, c.pweights, c.Tprime, c.maxNewTokens, -1],
         { signal: abort.signal, token: auth.token });
       if (!out?.samples) throw Object.assign(new Error('The Space sent an answer the page could not read.'), { code: 'bad_answer' });
     } else {
@@ -216,7 +244,7 @@ async function run() {
         method: 'POST', signal: abort.signal,
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
         body: JSON.stringify({ model: c.model, format: c.fmt, prompts: { A: c.A, B: c.B, ...(c.C ? { C: c.C } : {}) },
-          n: c.N, t_prime: c.Tprime, max_new_tokens: c.maxNewTokens }),
+          n: c.N, t_prime: 2 * c.Tprime, max_new_tokens: c.maxNewTokens }),   // Modal's T is 2T′ (modalCan)
       });
       out = await r.json().catch(() => null);
       if (!r.ok || !out?.samples) throw Object.assign(new Error(out?.detail || ''), { code: out?.code || (r.ok ? 'bad_answer' : 'server') });
@@ -261,11 +289,12 @@ function stageMsg(m) {
     if (a === 'stop') abort?.abort();
     if (a === 'retry') { stageMsg(null); run(); }
     if (a === 'use-modal') { $('#backend').value = 'modal'; syncGo(); stageMsg(null); run(); }
+    if (a === 'use-space') { $('#backend').value = 'space'; syncGo(); stageMsg(null); run(); }
     if (a === 'signin') signIn({ cfg: readConfig() }).catch(() => stageMsg({ title: 'The Hugging Face sign-in could not be loaded.', detail: 'Check your connection and try again.', actions: signInBtn() }));
     if (a === 'example') { stageMsg(null); setTimeout(() => { $('#exmenu').open = true; }); }   // after this click's close-menus pass
   }));
 }
-function setStatus(t) { $('#status').textContent = t; }
+function setStatus(html) { $('#status').innerHTML = html; }
 
 // A cached pool, or false when there is none (not drawn yet for this model and format: ↑ runs it).
 async function load(key) {
@@ -275,9 +304,23 @@ async function load(key) {
   show(await r.json(), key, 'Cached', 'Modal');   // the example pairs' pools are drawn by the pools workflow on Modal
   return true;
 }
+// A pool's proposal, from its record. Schema 3 (the Space) says it; schema 2 (Modal and the cached pools) drew from
+// (p_A p_B)^(1/T) token by token, the product at T′ = T/2, with its ending step scored token by token.
+function proposalOf(pool) {
+  const q = pool.proposal;
+  if (q && typeof q === 'object') return { tau: parseTau(q.tau), wA: q.wA, weights: q.weights, Tprime: q.Tprime, earlier: false };
+  return { tau: 0, wA: 0.5, weights: 'fixed', Tprime: (pool.Tprime ?? 1) / 2, earlier: true };
+}
+function describeProposal(q) {
+  const num = (x) => String(+x.toFixed(3)), named = NAMED.find((x) => x.tau === q.tau)?.name;
+  const who = q.wA === 1 ? 'prompt A alone' : q.wA === 0 ? 'prompt B alone'
+    : `the local ${named ?? `mean with ${tex(`\\tau' = ${num(q.tau)}`)}`}${q.tau === 0 ? '' : q.weights === 'prefix' ? ', weights following the prefix' : ', fixed weights'}${q.wA === 0.5 ? '' : `, ${tex(`w_A = ${num(q.wA)}`)}`}`;
+  return `${who}, ${tex(`T' = ${num(q.Tprime)}`)}${q.earlier ? ' (the earlier sampler)' : ''}`;
+}
 function show(pool, key, how, where) {
   S.pool = pool; S.poolKey = key;
-  setStatus(`${how}: ${pool.N} completions from ${pool.model.split('/').pop()}${pool.standIn ? ' (stand-in, on a CPU)' : `, drawn on ${where}`}.`);
+  S.poolStatus = `${how}: ${pool.N} completions from ${esc(pool.model.split('/').pop())}${pool.standIn ? ' (stand-in, on a CPU)' : `, drawn on ${where}`} from ${describeProposal(proposalOf(pool))}.`;
+  setStatus(S.poolStatus);
   // One group per distinct string; copies share every score.
   const byText = new Map();
   pool.samples.forEach((s, i) => { const g = byText.get(s.text); if (g) g.idx.push(i); else byText.set(s.text, { i, idx: [i] }); });
@@ -577,7 +620,8 @@ function wire() {
   $('#fmt').onchange = setFormat;
   $('#model').onchange = () => { syncModel(); settingsChanged(); };
   $('#backend').onchange = () => settingsChanged();
-  ['#pa', '#pb', '#pc', '#n', '#tp', '#maxtok'].forEach((id) => $(id).addEventListener('input', () => { clearTimeout(S.ct); S.ct = setTimeout(settingsChanged, 250); }));
+  $('#proposal').onchange = () => settingsChanged();
+  ['#pa', '#pb', '#pc', '#n', '#tp', '#maxtok', '#ptau', '#pw'].forEach((id) => $(id).addEventListener('input', () => { clearTimeout(S.ct); S.ct = setTimeout(settingsChanged, 250); }));
   ['#pa', '#pb'].forEach((id) => $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); run(); } }));
   $('#go').onclick = run;
   document.addEventListener('click', (e) => { for (const id of ['#exmenu', '#adv', '#viewmenu']) { const m = $(id); if (m.open && !e.composedPath().includes(m) && !e.target.closest('.xpop')) m.open = false; } });
@@ -606,7 +650,7 @@ const ENSEMBLE_EXPLAIN = {
       $$\\varphi_\\tau(y) = \\Big(\\tfrac12\\, p_A(y)^\\tau + \\tfrac12\\, p_B(y)^\\tau\\Big)^{1/\\tau}.$$</p>
       <ul>
         <li><b>min</b> ($\\tau = -\\infty$): only as good as the prompt that likes it less. Strict agreement.</li>
-        <li><b>harmonic</b> ($\\tau = -1$) and <b>product</b> ($\\tau \\to 0$, $\\sqrt{p_A p_B}$): agreement, less strictly. The product is the paper's main ensemble.</li>
+        <li><b>harmonic</b> ($\\tau = -1$) and <b>product</b> ($\\tau \\to 0$, $\\sqrt{p_A p_B}$): agreement, less strictly. The paper's Fig. 1 uses the product, there $p_A \\cdot p_B$ without the square root: the same ranking.</li>
         <li><b>sum</b> ($\\tau = 1$): a mixture; either prompt liking it helps.</li>
         <li><b>max</b> ($\\tau = +\\infty$): good if either prompt likes it. Coverage.</li>
       </ul>
@@ -619,8 +663,24 @@ const ENSEMBLE_EXPLAIN = {
   },
   proposal: {
     title: 'Where the completions come from',
-    body: `<p>The completions are drawn from the token-level product of A and B: each next token is picked with probability proportional to $p_A \\cdot p_B$ (at temperature $T'$). The probability of drawing a completion, $r(y)$, is recorded, so the ensemble's probabilities can be estimated from the pool (see <b>ensemble %</b> on the cards).</p>
-      <p>The paper's Fig. 1 used beam search; drawing at random is needed here because the corrections need $r(y)$. Other choices (A alone, B alone, a mixture) are planned.</p>`,
+    body: `<p>The completions are drawn one token at a time from a <b>proposal</b> $r$, a <i>local</i> ensemble of A and B. The slider's <i>global</i> ensemble $\\varphi_\\tau$ is then estimated from them by importance sampling, as in the paper (Def. 5.1): completion $y$ gets the weight $\\varphi_\\tau(y)/r(y)$, which the “ensemble %” and $\\log \\hat Z$ use. Moving the slider only reweights the same draws; another proposal needs new draws.</p>
+      <p>After the text so far $x$, the next token $y'$ is drawn with probability
+      $$r(y' \\mid x) \\propto \\Big(\\hat w_A\\, p_A(y' \\mid x)^{\\tau'} + \\hat w_B\\, p_B(y' \\mid x)^{\\tau'}\\Big)^{1/(\\tau' T')}.$$</p>
+      <ul>
+        <li><b>Weights following the prefix</b>, the paper's proposal (its shaping function, §5.2): $\\hat w_k \\propto w_k\\, \\vec p_k(x)^{\\tau'}$, where $\\vec p_k(x)$ is the probability of the text so far after prompt $k$. The prompt that likes the text so far gets more say. With $\\tau' = \\tau$, $w_A = \\tfrac12$ and $T' = 1$, it is the proposal the paper calls locally optimal (Prop. 5.2); for the sum ($\\tau = 1$) it is exact, and every weight is the same.</li>
+        <li><b>Fixed weights</b>: $\\hat w_k = w_k$ at every step.</li>
+      </ul>
+      <p>The two agree for the product ($\\tau' = 0$), where the mean is $p_A^{w_A} p_B^{w_B}$. Ending the completion is one choice, scored with each prompt's total probability of ending there, as for the paper's end symbol.</p>
+      <p>The paper's Fig. 1 used beam search; random draws are needed here because the weights need $r(y)$. The cached example pools, and runs on Modal, come from an earlier version of the sampler: the product only, which scored the ending step token by token. That is a slightly different proposal, and their weights use its own probabilities, so they are still correct.</p>`,
+  },
+  ptau: {
+    title: "The proposal's mean $\\tau'$",
+    body: `<p>Which generalised mean the proposal takes at each step, as $\\tau$ does for the target: <b>min</b> ($-\\infty$), <b>harmonic</b> ($-1$), <b>product</b> ($0$), <b>sum</b> ($1$), <b>quadratic</b> ($2$), <b>max</b> ($\\infty$), or any number. Type a name or a number (also -inf or inf).</p>
+      <p>Draws from a proposal close to the target need less correcting, so more of them count (see <b>Uses n of N</b>). For a target $\\tau$, the natural choice is $\\tau' = \\tau$.</p>`,
+  },
+  pw: {
+    title: "The proposal's weight $w_A$",
+    body: `<p>How much say prompt A has in the proposal; $w_B = 1 - w_A$. At $w_A = 1$ the completions are drawn from prompt A alone, at $w_A = 0$ from B alone. The target $\\varphi_\\tau$ keeps equal weights.</p>`,
   },
   model: {
     title: 'The model',
@@ -632,7 +692,7 @@ const ENSEMBLE_EXPLAIN = {
     title: 'Where runs happen',
     body: `<p><b>Modal</b>: the demo's own GPU (an L40S), paid from the demo's monthly budget; each visitor gets 20 runs a day, shared with the diversity demo.</p>
       <p><b>Hugging Face Space</b>: a ZeroGPU Space. Each run uses <i>your</i> Hugging Face account's daily GPU quota. A Space that has had no visitors for a while sleeps, so a first run can take a few minutes while it wakes up and loads the model.</p>
-      <p>Both run the same model weights with the same code. Either way, running new prompts needs a free Hugging Face sign-in; the example pairs are cached and need nothing.</p>`,
+      <p>Both run the same model weights. Modal runs the earlier sampler, which draws only from the product with equal weights and $T' \\le 1$; the Space draws from any proposal (see <b>The proposal</b>). Either way, running new prompts needs a free Hugging Face sign-in; the example pairs are cached and need nothing.</p>`,
   },
   format: {
     title: 'Prompt format',
@@ -641,7 +701,11 @@ const ENSEMBLE_EXPLAIN = {
       <p>Same weights, two different distributions: a chat model continuing bare text often writes as if in a worksheet or a forum; asked in its template, it answers. In both, the scores are exact probabilities of the same reply under each prompt.</p>`,
   },
   N: { title: 'Samples $N$', body: `<p>How many completions are drawn. The ranking and every readout are computed from these N; more completions represent the ensemble better.</p>` },
-  Tprime: { title: "Sampling temperature $T'$", body: `<p>The temperature at which each token is drawn: $r(y_t \\mid y_{&lt;t}) \\propto (p_A \\cdot p_B)^{1/T'}$. At $T' = 1$ the draws follow the token-level product exactly.</p>` },
+  Tprime: {
+    title: "The proposal's temperature $T'$",
+    body: `<p>Sharpens ($T' &lt; 1$) or flattens ($T' &gt; 1$) the proposal at every step. The paper samples at temperature 1; $T'$ is this demo's addition. Flatter draws are more varied, but further from the target.</p>
+      <p>For the product, $T' = \\tfrac12$ gives $p_A \\cdot p_B$ token by token, the local product of the paper's Fig. 1, which the cached pools use; $T' = 1$ gives $\\sqrt{p_A p_B}$, the target's product taken token by token.</p>`,
+  },
   maxtok: { title: 'Max tokens', body: `<p>A completion stops at the end of its first sentence, or after this many tokens. One that hits the limit is marked “cut off”.</p>` },
   stop: {
     title: 'One sentence',
@@ -660,7 +724,7 @@ const ENSEMBLE_EXPLAIN = {
   specials: {
     title: 'Where a reply ends',
     body: `<p>The model marks the end of its reply with a special token, <code>&lt;|im_end|&gt;</code>. A reply ends there, and also at any other special token: the end of a document, the start of a new turn (the model skipped the end mark), a reasoning tag or a tool call. None of these is text, so the reply shown is exactly what was scored.</p>
-      <p>Ending is part of the reply's probability: its score includes the probability that some special token comes next. Nothing is blocked or thrown away, which would change the model's distribution. Each reply records which special token ended it.</p>`,
+      <p>Ending is part of the reply's probability: its score includes the probability that some special token comes next. Nothing is blocked or thrown away, which would change the model's distribution.</p>`,
   },
   promptC: {
     title: 'The explicit prompt',

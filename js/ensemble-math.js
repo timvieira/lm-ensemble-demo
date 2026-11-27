@@ -41,6 +41,21 @@ export const NAMED = [
   { tau: -Infinity, name: 'min' }, { tau: -1, name: 'harmonic' }, { tau: 0, name: 'product' },
   { tau: 1, name: 'sum' }, { tau: 2, name: 'quadratic' }, { tau: Infinity, name: 'max' },
 ];
+// The proposal's τ′ as typed: a number, -inf or inf (also −∞, ∞), or a name (min, harmonic, product, sum, quadratic,
+// max; geometric and mixture too). NaN for anything else, and for finite values beyond ±1000 (the Space's limit,
+// space/ensemble_lib.py parse_tau). tauParam is its form for the Space's API.
+const TAU_NAMES = { min: -Infinity, harmonic: -1, product: 0, geometric: 0, sum: 1, mixture: 1, quadratic: 2, max: Infinity };
+export function parseTau(text) {
+  const s = String(text).trim().toLowerCase().replace(/−/g, '-').replace(/∞|infinity/g, 'inf');
+  if (s in TAU_NAMES) return TAU_NAMES[s];
+  if (s === 'inf' || s === '+inf') return Infinity;
+  if (s === '-inf') return -Infinity;
+  if (!/^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/.test(s)) return NaN;
+  const t = Number(s);
+  return Math.abs(t) <= 1000 ? t : NaN;
+}
+export const tauParam = (t) => (t === Infinity ? 'inf' : t === -Infinity ? '-inf' : String(t));
+
 export function tauName(tau) {
   const hit = NAMED.find((x) => x.tau === tau || (Number.isFinite(tau) && Number.isFinite(x.tau) && Math.abs(tau - x.tau) < 0.02));
   return hit ? hit.name : null;

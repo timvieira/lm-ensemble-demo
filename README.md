@@ -22,7 +22,9 @@ The brief, and how the sibling demo has been steered: `docs/handoff-ensemble-dem
 ## Backends: Modal (in dpp-lm-demo) and a Hugging Face Space (here)
 
 The settings' "Runs on" picks where a live run happens. Both need the visitor's Hugging Face sign-in, and both run
-the same weights with the same pool code.
+the same weights. Their samplers differ (26 Nov 2026): the Space draws from any local f-ensemble (the proposal's τ′,
+w_A, weights that follow the prefix as in the paper's §5.2 or fixed ones, and T′; pool records of schema 3), Modal
+from the token-level product only (schema 2; the page sends it only τ′ = product, w_A = ½, T′ ≤ 1).
 
 - **Modal**, dpp-lm-demo's app (`dpp-lm-sampler`, `modal/app.py` and `modal/ensemble_lib.py` there): the page calls
   its `/ensemble_sample` route (`MODAL_URL` in `js/ensemble.js`). Paid from the demo's Modal budget; 20 runs per
@@ -30,10 +32,12 @@ the same weights with the same pool code.
   `http://localhost:8765`.
 - **The Hugging Face Space** [xtimv/lm-ensemble-demo](https://huggingface.co/spaces/xtimv/lm-ensemble-demo), from
   `space/` here: Gradio on ZeroGPU, called through Gradio's queue (`js/space.js`) with the visitor's token, so a run
-  uses the visitor's own daily GPU quota. `space/ensemble_lib.py` is a copy of dpp-lm-demo's `modal/ensemble_lib.py`;
-  keep the two the same. Deploy by uploading the folder (with a Hugging Face token that can write to the Space):
-  `hf upload xtimv/lm-ensemble-demo space . --repo-type space`. Check a running Space with
-  `node scripts/space-check.mjs https://xtimv-lm-ensemble-demo.hf.space [model] [format] [n]`.
+  uses the visitor's own daily GPU quota. The page calls its API `ensemble_pool`; the older `ensemble_sample` (Modal's
+  arguments) stays for pages opened before the change. `space/ensemble_lib.py` started as a copy of dpp-lm-demo's
+  `modal/ensemble_lib.py` and has moved on (the proposal family). A push to `main` that changes `space/` deploys it
+  (`.github/workflows/space.yml`, after `tests/test_proposal.py`). Check a running Space with
+  `node scripts/space-check.mjs https://xtimv-lm-ensemble-demo.hf.space [model] [format] [n] [tau'] [w_A] [weights] [T'] [--old]`,
+  which also prints the effective sample size at each target τ.
 
 The cached pools are drawn by dpp-lm-demo's "Ensemble prototype pools" workflow on Modal, which reads *that*
 repository's `data/ensemble/presets.json` and commits the pools there; a change to the presets or a new set of pools

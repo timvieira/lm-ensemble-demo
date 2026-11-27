@@ -34,14 +34,15 @@ function openExplainer(btn) {
   btn.setAttribute('aria-expanded', 'true');
   const w = Math.min(360, window.innerWidth - 24);
   pop.style.width = w + 'px';
-  // Place below the button (above if there is no room), clamped to the viewport.
+  pop.style.maxHeight = window.innerHeight - 16 + 'px';   // a long explainer scrolls inside (the wide layout cannot scroll)
+  // Place below the button (above if there is no room; else wherever it fits), clamped to the viewport.
   const place = () => {
     if (openBtn !== btn) return;   // another explainer opened meanwhile
     const r = btn.getBoundingClientRect();
     const left = Math.max(12, Math.min(window.innerWidth - w - 12, r.left + r.width / 2 - w / 2));
     const h = pop.offsetHeight;
     let top = r.bottom + 8;
-    if (top + h > window.innerHeight - 8 && r.top - h - 8 > 8) top = r.top - h - 8;
+    if (top + h > window.innerHeight - 8) top = r.top - h - 8 > 8 ? r.top - h - 8 : window.innerHeight - h - 8;
     pop.style.left = left + window.scrollX + 'px';
     pop.style.top = Math.max(8, top) + window.scrollY + 'px';
     pop.style.visibility = '';

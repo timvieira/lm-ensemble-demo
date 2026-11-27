@@ -1,25 +1,135 @@
 """Pools for the ensemble ("prompt intersection") prototype: plain PyTorch, no Modal.
 
-Used by modal/app.py on the GPU (Qwen3 14B) and by scripts/ensemble_pool.py on a CPU (stand-in models).
-See docs/handoff-ensemble-demo.md (A3, A7) for what the page does with these numbers.
+This copy (lm-ensemble-demo's space/ensemble_lib.py) has moved on from dpp-lm-demo's modal/ensemble_lib.py: its
+proposal is a family of local f-ensembles (schema 3). dpp-lm-demo's copy, used by Modal and by the cached pools,
+still draws from the token-level product with its ending step summed token by token (schema 2).
 
-For prompts A and B (and an optional explicit-intersection prompt C), draw N completions i.i.d. from the
-token-level product of A and B at temperature T':
+For prompts A and B (and an optional explicit-intersection prompt C), draw N completions i.i.d. from a proposal r,
+a local f-ensemble of A and B, so the page can reweight them by importance sampling to any global generalised mean
+φ_τ(y) = (½ p_A(y)^τ + ½ p_B(y)^τ)^(1/τ) (Chan et al. 2026, "Ensembling Language Models with Sequential Monte
+Carlo", Def. 5.1: weights φ_τ(y)/r(y)). The proposal has its own power τ', weight w_A (w_B = 1 − w_A) and
+temperature T'. After the text so far x, the next token y' is drawn with
 
-    r(y_t | y_<t) ∝ (p_A(y_t | A, y_<t) · p_B(y_t | B, y_<t))^(1/T')
+    r(y' | x) ∝ ( ŵ_A p_A(y' | A, x)^τ' + ŵ_B p_B(y' | B, x)^τ' )^(1/(τ' T'))
 
-and record, for each completion y (the same token ids under every prompt):
+    weights "prefix":  ŵ_k ∝ w_k p_k(x)^τ', p_k(x) the probability of the text so far after prompt k. This is the
+                       paper's proposal, its shaping function ψ(x' | x) = f(p_A(x x'), p_B(x x')) / f(p_A(x), p_B(x))
+                       (§5.2, Prop. 5.2; prefix probabilities), here raised to 1/T'.
+    weights "fixed":   ŵ_k = w_k at every step.
 
-    logpA, logpB, logpC   Σ_t log p_X(y_t | X, y_<t): string-level scores (the global ensemble's inputs)
-    logr                  Σ_t log r(y_t | y_<t): the proposal, for importance weights
-    loglocal              Σ_t log normalise(p_A · p_B)(y_t | ...): the local (token-level) product ensemble
-                          (equal to logr at T' = 1)
+τ' = 0 is the weighted geometric mean (both weightings agree there), τ' = ±∞ are max and min over the prompts with
+nonzero weight; w_A = 1 or 0 draws from A or B alone. "The completion ends here" is one choice, as the paper's end
+symbol: its score is the same mean of each prompt's total probability of ending here (see "where a completion
+ends"), not a sum of per-token scores. T' is this demo's own addition: the paper samples at temperature 1.
+
+Recorded for each completion y (the same token ids under every prompt):
+
+    logpA, logpB, logpC   log p_X(y | X): string-level scores (the global ensemble's inputs), ending included
+    logr                  log r(y): the proposal's probability of drawing y, for importance weights
+    loglocal              Σ_t log normalise(p_A · p_B)(y_t | ...): the local (token-level) product ensemble of the
+                          paper's Fig. 1, its ending summed over the ending tokens (unchanged from schema 2)
 
 A completion is one sentence or one line (see "where a completion ends" below: pySBD's English rules that need
 only the next token), or stops at max_new_tokens (then "ended" is false). An ending contributes the probability of
-its whole ending set of next tokens, so every score is the exact probability of the completion ending there. The prompts are
-plain text continued by the model (no chat template), as in the paper's Fig. 1, unless chat=True.
+its whole ending set of next tokens, so every score is the exact probability of the completion ending there. The
+prompts are plain text continued by the model (no chat template), as in the paper's Fig. 1, unless chat=True.
 """
+import math
+
+NAMED_TAU = {"min": -math.inf, "harmonic": -1.0, "product": 0.0, "geometric": 0.0, "sum": 1.0, "mixture": 1.0,
+             "quadratic": 2.0, "max": math.inf}
+MAX_FINITE_TAU = 1000.0
+# The default here: the product at T' = 1, √(p_A p_B) token by token. (The cached pools' p_A · p_B token by token
+# is the product at T' = ½, drawn by the schema-2 sampler, whose ending step differs; see the module docstring.)
+PROPOSAL_DEFAULT = {"tau": 0.0, "wA": 0.5, "weights": "prefix", "Tprime": 1.0}
+
+
+def parse_tau(v):
+    """τ' from a number or a string: a number, "inf", "-inf" (also ∞, −∞), or a name (min, harmonic, product, sum,
+    quadratic, max). Raises ValueError for anything else, and for finite values beyond ±MAX_FINITE_TAU."""
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        t = float(v)
+    else:
+        s = str(v).strip().lower().replace("−", "-").replace("∞", "inf").replace("infinity", "inf")
+        if s in NAMED_TAU:
+            t = NAMED_TAU[s]
+        elif s in ("inf", "+inf", "-inf"):
+            t = -math.inf if s.startswith("-") else math.inf
+        else:
+            try:
+                t = float(s)
+            except ValueError:
+                raise ValueError(f"τ' must be a number, -inf, inf, or one of {', '.join(NAMED_TAU)}; got {v!r}")
+    if math.isnan(t) or (math.isfinite(t) and abs(t) > MAX_FINITE_TAU):
+        raise ValueError(f"τ' must be a number between −{MAX_FINITE_TAU:g} and {MAX_FINITE_TAU:g}, or ±∞")
+    return t
+
+
+def tau_json(t):
+    """τ' for a JSON record: JSON has no infinity, so ±∞ are the strings "inf" and "-inf"."""
+    return t if math.isfinite(t) else ("inf" if t > 0 else "-inf")
+
+
+def check_proposal(p):
+    """The proposal's parameters, checked: {"tau": float, "wA": float in [0, 1], "weights": "prefix"|"fixed",
+    "Tprime": float > 0}. Raises ValueError."""
+    q = {"tau": parse_tau(p.get("tau", 0.0)), "wA": float(p.get("wA", 0.5)),
+         "weights": str(p.get("weights", "prefix")), "Tprime": float(p.get("Tprime", 1.0))}
+    if not 0.0 <= q["wA"] <= 1.0:
+        raise ValueError("w_A must be between 0 and 1")
+    if q["weights"] not in ("prefix", "fixed"):
+        raise ValueError('weights must be "prefix" or "fixed"')
+    if not (q["Tprime"] > 0 and math.isfinite(q["Tprime"])):
+        raise ValueError("T' must be a positive number")
+    return q
+
+
+def local_f(la, lb, tau, wA, LA=None, LB=None):
+    """Log of the generalised mean (ŵ_A p_A^τ + ŵ_B p_B^τ)^(1/τ), elementwise, of two log-probability tensors
+    la, lb of shape [rows, X], up to a constant per row. Fixed weights ŵ = (w_A, 1 − w_A) if LA is None; with
+    LA, LB (the log-probabilities of each row's prefix under A and B, float64 [rows]), the prefix-following
+    weights ŵ_k ∝ w_k p_k(prefix)^τ. τ = 0: the weighted geometric mean (both weightings agree). τ = ±∞: max and
+    min over the prompts with nonzero weight. A prompt with weight 0 is left out."""
+    import torch
+    wB = 1.0 - wA
+    if wB == 0.0:
+        return la
+    if wA == 0.0:
+        return lb
+    if tau == 0.0:
+        return wA * la + wB * lb
+    if math.isinf(tau):
+        a = la if LA is None else la + (LA - LB).to(la.dtype)[:, None]   # p_A(prefix) p_A(x') vs p_B(prefix) p_B(x')
+        return torch.maximum(a, lb) if tau > 0 else torch.minimum(a, lb)
+    if LA is None:
+        lwA, lwB = math.log(wA), math.log(wB)
+    else:   # log ŵ in float64, normalised per row, then in the logits' dtype
+        lwA, lwB = math.log(wA) + tau * LA, math.log(wB) + tau * LB
+        z = torch.logaddexp(lwA, lwB)
+        lwA, lwB = (lwA - z).to(la.dtype)[:, None], (lwB - z).to(la.dtype)[:, None]
+    return torch.logaddexp(lwA + tau * la, lwB + tau * lb) / tau
+
+
+def proposal_logprobs(la, lb, ends, prop, LA=None, LB=None):
+    """The proposal's next-step log-probabilities, [rows, V + 1]: column v < V is continuing with token v
+    (−inf where token v would end the completion), column V is ending here. la, lb: next-token log-probabilities
+    under A and B, [rows, V]; ends: bool [rows, V], the tokens that end each row's completion here; LA, LB: the
+    prefixes' log-probabilities (float64 [rows]), needed for weights "prefix". prop: check_proposal's dict.
+    Ending is one choice, scored with the mean of each prompt's total probability of the ending tokens."""
+    import torch
+    ninf = float("-inf")
+    pre = prop["weights"] == "prefix"
+    if pre and (LA is None or LB is None):
+        raise ValueError('weights "prefix" needs the prefixes\' log-probabilities LA and LB')
+    LA, LB = (LA, LB) if pre else (None, None)
+    EA = torch.logsumexp(la.masked_fill(~ends, ninf), -1, keepdim=True)
+    EB = torch.logsumexp(lb.masked_fill(~ends, ninf), -1, keepdim=True)
+    s_tok = local_f(la, lb, prop["tau"], prop["wA"], LA, LB).masked_fill(ends, ninf)
+    s_end = local_f(EA, EB, prop["tau"], prop["wA"], LA, LB)
+    lr = torch.log_softmax(torch.cat([s_tok, s_end], -1) / prop["Tprime"], -1)
+    if torch.isnan(lr).any():
+        raise FloatingPointError("the proposal's probabilities came out NaN")
+    return lr
 
 
 def prompt_ids(tok, prompt, chat=False, chat_kw=None):
@@ -135,11 +245,12 @@ def _cut_line(text):
     return text.split("\n", 1)[0]
 
 
-def ensemble_sample(tok, model, A, B, n, t_prime=1.0, max_new_tokens=32, seed=0, batch_size=100,
+def ensemble_sample(tok, model, A, B, n, proposal=None, max_new_tokens=32, seed=0, batch_size=100,
                     chat=False, chat_kw=None):
-    """N completions i.i.d. from the token-level product of prompts A and B (see the module docstring)."""
+    """N completions i.i.d. from the proposal, a local f-ensemble of prompts A and B (see the module docstring)."""
     import inspect
     import torch
+    prop = check_proposal(proposal if proposal is not None else PROPOSAL_DEFAULT)
     dev = next(model.parameters()).device
     ia = torch.tensor([prompt_ids(tok, A, chat, chat_kw)], device=dev)
     ib = torch.tensor([prompt_ids(tok, B, chat, chat_kw)], device=dev)
@@ -156,7 +267,6 @@ def ensemble_sample(tok, model, A, B, n, t_prime=1.0, max_new_tokens=32, seed=0,
             acc = {k: torch.zeros(Bn, dtype=torch.float64) for k in ("A", "B", "r", "local")}
             # Text: the sentence rules above. Chat: a reply ends where the model ends its turn.
             done, kind, end = [False] * Bn, ["eos" if chat else "line"] * Bn, ["max"] * Bn
-            end_tok = [None] * Bn                                        # the special token that ended it, if any
             seqs = [[] for _ in range(Bn)]
             pa = pb = None
             sa, sb = ia.repeat(Bn, 1), ib.repeat(Bn, 1)
@@ -167,25 +277,29 @@ def ensemble_sample(tok, model, A, B, n, t_prime=1.0, max_new_tokens=32, seed=0,
                 pb = getattr(rb, "cache", None) or rb.past_key_values
                 la = torch.log_softmax(ra.logits[:, -1, :].float(), -1)
                 lb = torch.log_softmax(rb.logits[:, -1, :].float(), -1)
-                local = torch.log_softmax(la + lb, -1)                  # normalised token-level product
-                lr = torch.log_softmax((la + lb) / t_prime, -1)         # the proposal at T'
-                nxt = torch.multinomial(lr.exp(), 1, generator=gen).squeeze(1)
-                L = {"A": la, "B": lb, "r": lr, "local": local}
-                tokp = {k: l.gather(1, nxt[:, None]).squeeze(1).double().cpu() for k, l in L.items()}
-                # log P(an ending token comes next), per ending kind and distribution
-                endp = {kd: {k: torch.logsumexp(l.masked_fill(~masks[kd], float("-inf")), -1).double().cpu()
-                             for k, l in L.items()} for kd in KINDS}
-                isend = {kd: masks[kd][nxt].cpu().tolist() for kd in KINDS}
+                V = la.shape[1]
+                local = torch.log_softmax(la + lb, -1)                  # normalised token-level product (Fig. 1)
+                ends = torch.stack([masks[k] for k in kind])            # [Bn, V]: the tokens that end each one here
+                # The proposal over [continue with token v | end here]; the prefixes' log-probabilities so far.
+                lr = proposal_logprobs(la, lb, ends, prop, acc["A"].to(dev), acc["B"].to(dev))
+                pick = torch.multinomial(lr.exp(), 1, generator=gen).squeeze(1)
+                isend = (pick == V).cpu().tolist()
+                nxt = pick.clamp(max=V - 1)                              # a token to feed the finished ones
+                tokp = {k: l.gather(1, nxt[:, None]).squeeze(1).double().cpu()
+                        for k, l in {"A": la, "B": lb, "local": local}.items()}
+                tokp["r"] = lr.gather(1, pick[:, None]).squeeze(1).double().cpu()   # continuing or ending
+                # log P(an ending token comes next) under A, B and the local product, for each one's ending kind
+                endp = {k: torch.logsumexp(l.masked_fill(~ends, float("-inf")), -1).double().cpu()
+                        for k, l in {"A": la, "B": lb, "local": local}.items()}
+                endp["r"] = tokp["r"]
                 nl = nxt.cpu().tolist()
                 for b in range(Bn):
                     if done[b]:
                         continue
-                    if isend[kind[b]][b]:
+                    if isend[b]:
                         for k in acc:
-                            acc[k][b] += endp[kind[b]][k][b]
+                            acc[k][b] += endp[k][b]
                         done[b], end[b] = True, kind[b]
-                        if nl[b] in eos_set:
-                            end_tok[b] = tok.convert_ids_to_tokens(nl[b])
                         continue
                     if len(seqs[b]) >= max_new_tokens:
                         done[b] = True                                   # cut off ("max")
@@ -208,7 +322,7 @@ def ensemble_sample(tok, model, A, B, n, t_prime=1.0, max_new_tokens=32, seed=0,
                     "ids": seqs[b], "endKind": end[b] if end[b] in KINDS else None,
                     "text": _cut_line(text) if end[b] == "token" else text,
                     "logpA": acc["A"][b], "logpB": acc["B"][b], "logr": acc["r"][b], "loglocal": acc["local"][b],
-                    "nTokens": len(seqs[b]), "ended": end[b] != "max", "endToken": end_tok[b],
+                    "nTokens": len(seqs[b]), "ended": end[b] != "max",
                     "end": {"any": "sentence", "upper": "sentence", "nodigit": "sentence", "line": "line",
                             "token": "line", "eos": "eos", "max": "max"}[end[b]],
                 })
@@ -250,16 +364,17 @@ def score_ids(tok, model, prompt, seqs, end_kinds=None, batch_size=50, chat=Fals
 CHAT_KW = {"enable_thinking": False}   # Qwen3: answer directly, no reasoning block
 
 
-def ensemble_pool(tok, model, preset, fmt="text", n=200, t_prime=1.0, max_new_tokens=32, seed=0,
+def ensemble_pool(tok, model, preset, fmt="text", n=200, proposal=None, max_new_tokens=32, seed=0,
                   chat_kw=CHAT_KW, model_name="", check=True):
     """One preset's pool in one prompt format ("text": continue the prompt as plain text, as in the paper's
     Fig. 1; "chat": the prompts are user messages in the model's chat template and the completions are its
-    replies): samples from the A×B product, scored under A, B and (if given) C."""
+    replies): samples from the proposal (a local f-ensemble of A and B), scored under A, B and (if given) C."""
     chat = fmt == "chat"
     pid, label, preset = preset["id"], preset.get("label", ""), preset[fmt]
+    prop = check_proposal(proposal if proposal is not None else PROPOSAL_DEFAULT)
     import time
     t0 = time.time()
-    S = ensemble_sample(tok, model, preset["A"], preset["B"], n, t_prime, max_new_tokens, seed,
+    S = ensemble_sample(tok, model, preset["A"], preset["B"], n, prop, max_new_tokens, seed,
                         chat=chat, chat_kw=chat_kw)
     t1 = time.time()
     seqs, bnd = [s["ids"] for s in S], [s["endKind"] for s in S]
@@ -275,9 +390,11 @@ def ensemble_pool(tok, model, preset, fmt="text", n=200, t_prime=1.0, max_new_to
     for s in S:
         del s["ids"], s["endKind"]
     return {
-        "schema": 2, "kind": "ensemble-pool", "id": pid, "label": label, "format": fmt,
+        "schema": 3, "kind": "ensemble-pool", "id": pid, "label": label, "format": fmt,
         "prompts": {k: preset[k] for k in ("A", "B", "C") if preset.get(k)},
-        "model": model_name, "chat": chat, "proposal": "local_product", "Tprime": t_prime,
+        "model": model_name, "chat": chat,
+        "proposal": {"kind": "local_f", "tau": tau_json(prop["tau"]), "wA": prop["wA"], "weights": prop["weights"],
+                     "Tprime": prop["Tprime"], "end": "one choice"},
         "maxNewTokens": max_new_tokens, "stop": "sentence-or-line-v2", "N": len(S), "seed": seed,
         "checkMaxAbsErr": check_err,
         "timing": {"sample_s": round(t1 - t0, 2), "score_s": round(time.time() - t1, 2)},

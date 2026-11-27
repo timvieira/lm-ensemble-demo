@@ -27,13 +27,20 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   data/ensemble/presets.json and commits pools there. So a preset change or new pools must be copied by hand between
   dpp-lm-demo's data/ensemble/ and data/ here. Open: whether it moves here later.
   26 Nov (Tim): a second backend lives here, a Hugging Face ZeroGPU Space (xtimv/lm-ensemble-demo, from space/), next
-  to Modal; the visitor picks it under "Runs on". space/ensemble_lib.py is a copy of dpp-lm-demo's
-  modal/ensemble_lib.py (at 099e77e): two copies to keep the same.
+  to Modal; the visitor picks it under "Runs on". space/ensemble_lib.py started as a copy of dpp-lm-demo's
+  modal/ensemble_lib.py (at 099e77e). Since 26 Nov they differ: the Space's draws from the proposal family below
+  (schema 3), Modal's from the token-level product only (schema 2).
 - **The unused copies in dpp-lm-demo.** Decided (Tim, 26 Nov): lab/ensemble*.js, data/ensemble/,
   tests/ensemble.test.mjs and docs/handoff-ensemble-demo.md stay there. They will drift from the copies here.
 - **What "product" means at τ = 0.** The page's product is the weighted geometric mean √(p_A p_B) (weights ½; the
   τ explainer says so), normalised. Whether the paper's Fig. 1 uses that or p_A·p_B has not been checked against
   the paper. Rankings and ρ are the same either way; "ensemble %", log Ẑ and "Uses n of N" are not.
+  26 Nov, read in the **arXiv v1** only (the NeurIPS 2026 version, openreview.net/forum?id=zWigIoVsHo, is not read
+  yet: OpenReview refuses scripts and is blocked in the Chrome extension). The paper uses both. Fig. 1 and §2 use
+  the unweighted product, locally ("multiplies the token-level probabilities ... then normalizes", which is the
+  sampler's `local`) and globally ("multiplies these string-level probabilities"): p_A·p_B. Table 1 and Eq. (6),
+  with w ∈ Δ, give Π p_k^{w_k}: √(p_A p_B) at w = ½, which the page uses for the global score. Open: which one the
+  page should follow.
 
 ### Found in the review of the page (26 Nov)
 - **The importance weights are concentrated on most continue-text pools**, so log Ẑ and every card's "ensemble %"
@@ -56,6 +63,42 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   token-level proposal is ∝ √(p_A p_B), the page's product target token by token, so the weights reduce to the
   per-step normalisers. For sum and max, a mixture of A and B is the matching proposal (at τ = 1 it is the target).
   Asked by Tim: a better proposal, and SMC as in the paper (proposals in the reply of 26 Nov).
+  Design (Tim, 26 Nov): importance sampling, not SMC. The proposal is a local f-ensemble with its own τ′, weights
+  and T′, reweighted to the global target τ, like the DPP demo's T′ and T. Waiting for Tim's go-ahead.
+  Against the paper (arXiv v1, §5):
+  - Def. 5.1 is this sampler: any proposal r, with weights w = φ/r.
+  - The paper's own proposal (§5.2, Prop. 5.2, §6) is r ∝ ψ(x′ | x) = f(p⃗_A(x x′), p⃗_B(x x′)) / f(p⃗_A(x), p⃗_B(x)).
+    That is a local f-ensemble whose weights follow the prefix, ŵ_k(x) ∝ w_k p⃗_k(x)^τ. It equals the fixed-weight
+    one only at τ = 0. At τ = 1 it is exact: the weights are the posterior over the two prompts, and every
+    importance weight is equal.
+  - Toy check (scripts/proposal-check.py; two random LMs, 3 symbols, length ≤ 5, one seed). Large-n ESS/n, fixed
+    weights vs ψ:
+
+    | τ | fixed | ψ |
+    |---|---|---|
+    | ≈ min (−8) | 0.59 | 0.61 |
+    | harmonic (−1) | 0.62 | 0.63 |
+    | product (0) | 0.73 | 0.73 |
+    | sum (1) | 0.63 | 1.00 |
+    | ≈ max (8) | 0.58 | 0.95 |
+
+  - Decided (Tim, 26 Nov: "Go"): both, with the paper's ψ weights as the default.
+  - The paper has no proposal temperature (App. E: temperature 1.0), so T′ is the demo's own addition.
+  - **Done on the Space and the page (26 Nov):** `space/ensemble_lib.py` (local_f, proposal_logprobs; schema 3),
+    the Space API `ensemble_pool` (the older `ensemble_sample` maps to the product at T′ = t/2), and the settings
+    ("The proposal: a local ensemble": its weights, τ′, w_A, T′). The ending step is one choice, scored with the
+    mean of each prompt's total ending probability, as for the paper's end symbol; the schema-2 sampler summed it
+    token by token. Checked: tests/test_proposal.py (every step against the definition on an enumerable toy model,
+    to 2.6e-6 in log r; the mixture proposal exact; runs in the Space deploy workflow) and
+    scripts/sampler-check.py (GPT-2 on a CPU: 8 proposals, recorded logr, logpA, logpB equal an uncached step-by-step
+    recomputation to 7e-5 nats). Local Space (CPU, GPT-2, 6 draws, sum proposal): ESS 6.0 of 6 at the sum target.
+  - **Open, needs Tim: Modal.** Modal (dpp-lm-demo's modal/ensemble_lib.py) still runs the schema-2 sampler. The
+    page sends Modal only τ′ = product, w_A = ½, T′ ≤ 1 (its t_prime = 2T′) and otherwise offers the Space. Porting
+    the sampler there changes code shared with the DPP demo's app.
+  - **Open, needs Tim: the cached pools.** They are schema 2 (the product at T′ = ½, p_A·p_B token by token, the
+    old ending step), so the page's defaults stay at that proposal for now (DEFAULTS in js/ensemble.js), and the
+    status line says "(the earlier sampler)". Redraw them with the new sampler (on Modal after the port, or on the
+    Space), then move the defaults to the new proposal (T′ = 1, the paper's ψ weights).
 - **The chat pools are nearly deterministic: 1 to 6 distinct completions in 200.** Painter × inventor is
   "Leonardo da Vinci" 200 times (hence ESS 200: equal weights, one string); physicist × author is 3 strings
   (Albert Einstein ×157, Stephen Hawking ×41, J.K. Rowling ×2); dessert × vegetable is "Carrot cake" in three
@@ -66,10 +109,21 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
 - **Plot labels still crowd:** "Richard Feynman." and "Stephen Hawking." (physicist × author) sit one under the other,
   and Hawking's label is 16 px below its dot (the labels are only pushed apart vertically). Rechecked after the
   full-page layout: unchanged.
+- **Cut-off completions are weighted as if they were complete** (found 26 Nov, not new): a completion that reaches
+  Max tokens is not scored for not ending, under the targets or the proposal, so its weight φ_τ/r compares prefix
+  probabilities. Not said on the page beyond "cut off". How many are cut off, and how much weight they carry, is not
+  measured.
 - **The page makes claims about the paper that have not been checked against it** (they came from the handoff):
   the τ explainer says the product is "the paper's main ensemble" and that each τ is the distribution closest to
   both prompts under an α-divergence with α = 1 − τ; the explicit-prompt explainer quotes the paper's ρ = 0.96
   (global) and ρ = 0.09 (local). Check each against the paper's PDF (the conference version).
+  26 Nov, against the arXiv v1 only (the conference version is still to be read):
+  - ρ = 0.958 and 0.090 (§2) match.
+  - α = 1 − τ matches Thm. 4.1, which is stated for α ∉ {0, 1}. Table 1 gives KL(Φ‖p_k) at τ = 0 and KL(p_k‖Φ) at τ = 1.
+  - "The paper's main ensemble" overstates it. Fig. 1 uses the product, but §6 evaluates min, product, sum and max
+    side by side; the consensus-seeking two, min and product, do best.
+    Fixed on the page (26 Nov): the τ explainer now says the paper's Fig. 1 uses the product, there p_A·p_B
+    without the square root (the same ranking).
 - **On a phone the labels drift far from their dots** (Tim's screenshot, 26 Nov: "Albert Einstein." about 50 px from
   its point): on a narrow frame most labels sit left of their dots and are pushed down one by one. Same cause as the
   crowding item above.
@@ -97,6 +151,8 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
 
 ### Untested after the move
 - Hugging Face sign-in end to end, and a live run (/ensemble_sample) from this address.
+- A run of the new proposals from the page itself, signed in (26 Nov). The Space's API was checked with the page's own
+  client (js/space.js) and the page's argument order by scripts/space-check.mjs, not by pressing ↑ while signed in.
 - The page on a real phone; pinch and two-finger moves on a real touch screen (not simulated: d3.zoom's own touch handling).
 
 ### Notes
@@ -108,6 +164,10 @@ lab/ensemble.* is now index.html and js/, data/ensemble/ is now data/; modal/ an
   (or after `gh auth refresh -s workflow`).
 
 ### Done (26 Nov)
+- **Explainers fit the window** (26 Nov): a long one (the new proposal explainer is 830 px) scrolls inside its box,
+  and is placed wherever it fits; before, the wide layout (which cannot scroll) cut off its bottom.
+- **The status line comes back** when the settings return to those of the plot shown (26 Nov); it used to keep
+  saying "The plot is from earlier prompts or settings".
 - **MathJax for every symbol** (Tim, 26 Nov: "use mathjax"; his global rule). MathJax 3.2.2, SVG output
   (tex-svg-full, fontCache local) replaces KaTeX. The page's own text is typeset at start-up, explainers when they open
   (js/explain.js), and the text the page builds (cards, readouts, the τ readout, tooltip, ρ line) gets cached
